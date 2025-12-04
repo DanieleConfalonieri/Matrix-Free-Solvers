@@ -31,36 +31,69 @@
 #include <deal.II/matrix_free/operators.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
 
-template <int dim, int fe_degree, std::floating_point T>
-  ADROperator<dim, fe_degree, number>::ADROperator()
-    : MatrixFreeOperators::Base<dim,
-                                LinearAlgebra::distributed::Vector<number>>()
+using namespace dealii;
+
+template <int dim, int fe_degree, std::floating_point NumberType>
+  ADROperator<dim, fe_degree, NumberType>::ADROperator()
+    : dealii::MatrixFreeOperators::Base<dim,
+                                LinearAlgebra::distributed::Vector<NumberType>>()
   {}
 
 
-template <int dim, int fe_degree, typename number>
-  void ADROperator<dim, fe_degree, number>::clear()
+template <int dim, int fe_degree, std::floating_point NumberType>
+  void ADROperator<dim, fe_degree, NumberType>::clear()
   {
-    coefficient.reinit(0, 0);
-    MatrixFreeOperators::Base<dim, LinearAlgebra::distributed::Vector<number>>::
-      clear();
+      dealii::MatrixFreeOperators::Base<dim, LinearAlgebra::distributed::Vector<NumberType>>::clear();
+      mu.reinit(0, 0);
+      beta.reinit(0, 0);
+      gamma_eff.reinit(0, 0);
   }
 
 
-  template <int dim, int fe_degree, typename number>
-  void ADROperator<dim, fe_degree, number>::evaluate_coefficient(
-    const Coefficient<dim> &coefficient_function)
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void ADROperator<dim, fe_degree, NumberType>::evaluate_coefficient(
+    const Function<dim, NumberType> &mu_function,
+    const Function<dim, NumberType> &beta_function,
+    const Function<dim, NumberType> &gamma_function)
   {
+    //Initialize coefficient tables
     const unsigned int n_cells = this->data->n_cell_batches();
-    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number> phi(*this->data);
- 
-    coefficient.reinit(n_cells, phi.n_q_points);
+
+    //Obtain quadrature points
+    FEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> phi(*this->data);
+    const unsigned int n_q_points = phi.n_q_points;
+
+    mu.reinit(n_cells, n_q_points);
+    beta.reinit(n_cells, n_q_points);
+    gamma_eff.reinit(n_cells, n_q_points);
+
     for (unsigned int cell = 0; cell < n_cells; ++cell)
       {
+        //reinitiate for each cell
         phi.reinit(cell);
-        for (const unsigned int q : phi.quadrature_point_indices())
-          coefficient(cell, q) =
-            coefficient_function.value(phi.quadrature_point(q));
+        const auto vectorized_point = phi.get_quadrature_point(q);
+
+        // unroll over the vectorized point
+        for (unsigned int lane = 0; lane < VectorizedArray<NumberType>::size(); ++lane)
+          {
+            //exctract the point in the lane
+            const Point<dim, NumberType> qp = vectorized_point[lane];
+            //evaluate coefficients
+            const NumberType mu_value = mu_function.value(qp);
+            const NumberType gamma_value = gamma_function.value(qp);
+            const Tensor<1, dim, NumberType> beta_value = beta_function.value(qp);
+            //pointwise evaluation of div(beta)
+            const Tensor<2, dim, NumberType> beta_grad = beta_function.gradient(qp);
+            const NumberType div_beta_value = trace(beta_grad);
+
+            // fill tables
+            mu(cell, q)[lane] = mu_value;
+            gamma_eff(cell, q)[lane] = gamma_value + div_beta_value; //gamma_eff = gamma + div(beta)
+            for (unsigned int d = 0; d < dim; ++d)
+              {
+                beta(cell, q)[d][lane] = beta_value[d];
+              }
+          }
       }
   }
  
