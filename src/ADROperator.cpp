@@ -60,7 +60,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     const unsigned int n_cells = this->data->n_cell_batches();
 
     //Obtain quadrature points
-    FEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> phi(*this->data);
+    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> phi(*this->data);
     const unsigned int n_q_points = phi.n_q_points;
 
     mu.reinit(n_cells, n_q_points);
@@ -100,31 +100,40 @@ template <int dim, int fe_degree, std::floating_point NumberType>
  
  
  
-  template <int dim, int fe_degree, typename number>
-  void ADROperator<dim, fe_degree, number>::local_apply(
-    const MatrixFree<dim, number>                    &data,
-    LinearAlgebra::distributed::Vector<number>       &dst,
-    const LinearAlgebra::distributed::Vector<number> &src,
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void ADROperator<dim, fe_degree, NumberType>::local_apply(
+    const MatrixFree<dim, NumberType>                    &data,
+    LinearAlgebra::distributed::Vector<NumberType>       &dst,
+    const LinearAlgebra::distributed::Vector<NumberType> &src,
     const std::pair<unsigned int, unsigned int>      &cell_range) const
   {
-    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number> phi(data);
- 
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
-        AssertDimension(coefficient.size(0), data.n_cell_batches());
-        AssertDimension(coefficient.size(1), phi.n_q_points);
- 
         phi.reinit(cell);
         phi.read_dof_values(src);
-        phi.evaluate(EvaluationFlags::gradients);
-        for (const unsigned int q : phi.quadrature_point_indices())
-          phi.submit_gradient(coefficient(cell, q) * phi.get_gradient(q), q);
-        phi.integrate(EvaluationFlags::gradients);
+        phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
+
+        for (unsigned int q=0; q < phi.n_q_points; ++q){
+          const auto u_value = phi.get_value(q);
+          const auto u_grad = phi.get_gradient(q);
+
+          const auto mu_val    = mu[cell][q];
+          const auto beta_val  = beta[cell][q];
+          const auto gamma_val = gamma_eff[cell][q];
+
+          auto val_term = (beta_val * u_grad) + (gamma_val * u_value);
+          auto grad_term = mu_val * u_grad;
+
+          // diffusion term
+          phi.submit_gradient( grad_term , q);
+          phi.submit_value( val_term , q);
+        }
+        phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
         phi.distribute_local_to_global(dst);
       }
   }
  
- 
+  //TODO -> continue from here
  
   template <int dim, int fe_degree, typename number>
   void ADROperator<dim, fe_degree, number>::apply_add(
