@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.12.0)
 project(project_title LANGUAGES CXX C)
 
-include(../common/cmake-common.cmake)
+# Da CMakeLists.txt a common/ è: common/..., NON ../common/...
+include(common/cmake-common.cmake)
 
-add_executable(lab-01 src/lab-01.cpp src/Poisson1D.cpp)
-deal_ii_setup_target(lab-01)
+# Eseguibile che compila solo MatrixFreeSolver.cpp
+add_executable(MatrixFreeSolver
+    src/MatrixFreeSolver.cpp
+)
+
+# Macro definita in cmake-common.cmake (deal.II, flags, include, ecc.)
+deal_ii_setup_target(MatrixFreeSolver)
