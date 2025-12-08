@@ -71,31 +71,36 @@ template <int dim, int fe_degree, std::floating_point NumberType>
       {
         //reinitiate for each cell
         phi.reinit(cell);
-        const auto vectorized_point = phi.get_quadrature_point(q);
 
-        // unroll over the vectorized point
-        for (unsigned int lane = 0; lane < VectorizedArray<NumberType>::size(); ++lane)
+        //evaluate quadrature points
+        for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
-            //exctract the point in the lane
-            const Point<dim, NumberType> qp = vectorized_point[lane];
-            //evaluate coefficients
-            const NumberType mu_value = mu_function.value(qp);
-            const NumberType gamma_value = gamma_function.value(qp);
-            const Tensor<1, dim, NumberType> beta_value = beta_function.value(qp);
-            //pointwise evaluation of div(beta)
-            const Tensor<2, dim, NumberType> beta_grad = beta_function.gradient(qp);
-            const NumberType div_beta_value = trace(beta_grad);
+          const auto vectorized_point = phi.get_quadrature_point(q);
 
-            // fill tables
-            mu(cell, q)[lane] = mu_value;
-            gamma_eff(cell, q)[lane] = gamma_value + div_beta_value; //gamma_eff = gamma + div(beta)
-            for (unsigned int d = 0; d < dim; ++d)
-              {
-                beta(cell, q)[d][lane] = beta_value[d];
-              }
+          // unroll over the vectorized point
+          for (unsigned int lane = 0; lane < VectorizedArray<NumberType>::size(); ++lane)
+            {
+              //exctract the point in the lane
+              const Point<dim, NumberType> qp = vectorized_point[lane];
+              //evaluate coefficients
+              const NumberType mu_value = mu_function.value(qp);
+              const NumberType gamma_value = gamma_function.value(qp);
+              const Tensor<1, dim, NumberType> beta_value = beta_function.value(qp);
+              //pointwise evaluation of div(beta)
+              const Tensor<2, dim, NumberType> beta_grad = beta_function.gradient(qp);
+              const NumberType div_beta_value = trace(beta_grad);
+
+              // fill tables
+              mu(cell, q)[lane] = mu_value;
+              gamma_eff(cell, q)[lane] = gamma_value + div_beta_value; //gamma_eff = gamma + div(beta)
+              for (unsigned int d = 0; d < dim; ++d)
+                {
+                  beta(cell, q)[d][lane] = beta_value[d];
+                }
+            }
           }
-      }
-  }
+       }
+    }  
  
  
  
@@ -107,6 +112,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     const LinearAlgebra::distributed::Vector<NumberType> &src,
     const std::pair<unsigned int, unsigned int>      &cell_range) const
   {
+    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> phi(data);
     for (unsigned int cell = cell_range.first; cell < cell_range.second; ++cell)
       {
         phi.reinit(cell);
@@ -133,24 +139,21 @@ template <int dim, int fe_degree, std::floating_point NumberType>
       }
   }
  
-  //TODO -> continue from here
- 
-  template <int dim, int fe_degree, typename number>
-  void ADROperator<dim, fe_degree, number>::apply_add(
-    LinearAlgebra::distributed::Vector<number>       &dst,
-    const LinearAlgebra::distributed::Vector<number> &src) const
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void ADROperator<dim, fe_degree, NumberType>::apply_add(
+    LinearAlgebra::distributed::Vector<NumberType>       &dst,
+    const LinearAlgebra::distributed::Vector<NumberType> &src) const
   {
     this->data->cell_loop(&ADROperator::local_apply, this, dst, src);
   }
  
  
- 
-  template <int dim, int fe_degree, typename number>
-  void ADROperator<dim, fe_degree, number>::compute_diagonal()
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void ADROperator<dim, fe_degree, NumberType>::compute_diagonal()
   {
     this->inverse_diagonal_entries.reset(
-      new DiagonalMatrix<LinearAlgebra::distributed::Vector<number>>());
-    LinearAlgebra::distributed::Vector<number> &inverse_diagonal =
+      new DiagonalMatrix<LinearAlgebra::distributed::Vector<NumberType>>());
+    LinearAlgebra::distributed::Vector<NumberType> &inverse_diagonal =
       this->inverse_diagonal_entries->get_vector();
     this->data->initialize_dof_vector(inverse_diagonal);
  
@@ -158,33 +161,44 @@ template <int dim, int fe_degree, std::floating_point NumberType>
                                       inverse_diagonal,
                                       &ADROperator::local_compute_diagonal,
                                       this);
- 
     this->set_constrained_entries_to_one(inverse_diagonal);
  
     for (unsigned int i = 0; i < inverse_diagonal.locally_owned_size(); ++i)
       {
+        /* IS OUR OPERATOR POSITIVE DEFINITE?
         Assert(inverse_diagonal.local_element(i) > 0.,
                ExcMessage("No diagonal entry in a positive definite operator "
                           "should be zero"));
-        inverse_diagonal.local_element(i) =
-          1. / inverse_diagonal.local_element(i);
+        */ 
+        // Invert the diagonal entries to get Jacobi preconditioner
+        if(std::abs(inverse_diagonal.local_element(i)) > std::numeric_limits<NumberType>::epsilon())
+        {
+          inverse_diagonal.local_element(i) = 1. / inverse_diagonal.local_element(i);
+        }
       }
   }
  
  
  
-  template <int dim, int fe_degree, typename number>
-  void ADROperator<dim, fe_degree, number>::local_compute_diagonal(
-    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, number> &phi) const
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void ADROperator<dim, fe_degree, NumberType>::local_compute_diagonal(
+    FEEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> &phi) const
   {
+    //TO DISCUSS -> shall we consider beta? advection operator might be skew-symmetric with small diagonal terms
     const unsigned int cell = phi.get_current_cell_index();
  
-    phi.evaluate(EvaluationFlags::gradients);
+    phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
  
     for (const unsigned int q : phi.quadrature_point_indices())
       {
-        phi.submit_gradient(coefficient(cell, q) * phi.get_gradient(q), q);
+        const auto mu_val    = mu[cell][q];
+        const auto gamma_val = gamma_eff[cell][q];
+ 
+        // diffusion term: mu*grad(phi)*grad(phi)
+        phi.submit_gradient( mu_val * phi.get_gradient(q) , q);
+        // reaction + advection term: gamma*phi*phi
+        phi.submit_value( gamma_val * phi.get_value(q) , q);
+        // Note: advection term contribution to diagonal is neglected for now
       }
-    phi.integrate(EvaluationFlags::gradients);
+    phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
   }
-
