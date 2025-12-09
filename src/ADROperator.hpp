@@ -34,13 +34,13 @@
 #include <deal.II/matrix_free/fe_evaluation.h>
  
 
-template<int dim, int degree_finite_element, std::floating_point NumberType>
+template<int dim, int fe_degree, std::floating_point NumberType>
 class ADROperator
     : public dealii::MatrixFreeOperators::
-        Base<dim, LinearAlgebra::distributed::Vector<NumberType>>
+        Base<dim, dealii::LinearAlgebra::distributed::Vector<NumberType>>
 {
     public:
-    using VectorType = LinearAlgebra::distributed::Vector<NumberType>;
+    using VectorType = dealii::LinearAlgebra::distributed::Vector<NumberType>;
 
     ADROperator();
  
@@ -57,17 +57,14 @@ class ADROperator
       VectorType       &dst,
       const VectorType &src) const override;
  
-    void
-    local_apply(const dealii::MatrixFree<dim, NumberType>                    &data,
+    void local_apply(const dealii::MatrixFree<dim, NumberType>                    &data,
                 VectorType       &dst,
                 const VectorType &src,
                 const std::pair<unsigned int, unsigned int> &cell_range) const;
  
     void local_compute_diagonal(
-      const dealii::MatrixFree<dim, NumberType>   &data,
-      VectorType                                  &dst,
-      const unsigned int                          &dummy,
-      const std::pair<unsigned int, unsigned int> &cell_range) const;
+      dealii::FEEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> &phi
+    ) const;
  
     dealii::Table<2, dealii::VectorizedArray<NumberType>> mu, gamma_eff; //gamma_eff = gamma + div(beta)
     dealii::Table<2, dealii::Tensor<1, dim, dealii::VectorizedArray<NumberType>>> beta;

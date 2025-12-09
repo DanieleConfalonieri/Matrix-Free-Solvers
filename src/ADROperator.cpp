@@ -35,15 +35,14 @@ using namespace dealii;
 
 template <int dim, int fe_degree, std::floating_point NumberType>
   ADROperator<dim, fe_degree, NumberType>::ADROperator()
-    : dealii::MatrixFreeOperators::Base<dim,
-                                LinearAlgebra::distributed::Vector<NumberType>>()
+    : dealii::MatrixFreeOperators::Base<dim,dealii::LinearAlgebra::distributed::Vector<NumberType>>()
   {}
 
 
 template <int dim, int fe_degree, std::floating_point NumberType>
   void ADROperator<dim, fe_degree, NumberType>::clear()
   {
-      dealii::MatrixFreeOperators::Base<dim, LinearAlgebra::distributed::Vector<NumberType>>::clear();
+      dealii::MatrixFreeOperators::Base<dim, dealii::LinearAlgebra::distributed::Vector<NumberType>>::clear();
       mu.reinit(0, 0);
       beta.reinit(0, 0);
       gamma_eff.reinit(0, 0);
@@ -51,7 +50,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
 
 
   template <int dim, int fe_degree, std::floating_point NumberType>
-  void ADROperator<dim, fe_degree, NumberType>::evaluate_coefficient(
+  void ADROperator<dim, fe_degree, NumberType>::evaluate_coefficients(
     const Function<dim, NumberType> &mu_function,
     const Function<dim, NumberType> &beta_function,
     const Function<dim, NumberType> &gamma_function)
@@ -75,20 +74,27 @@ template <int dim, int fe_degree, std::floating_point NumberType>
         //evaluate quadrature points
         for (unsigned int q = 0; q < phi.n_q_points; ++q)
           {
-          const auto vectorized_point = phi.get_quadrature_point(q);
+          // point containing all vectorized quadrature points
+          const auto vectorized_point = phi.quadrature_point(q);
 
           // unroll over the vectorized point
           for (unsigned int lane = 0; lane < VectorizedArray<NumberType>::size(); ++lane)
             {
               //exctract the point in the lane
-              const Point<dim, NumberType> qp = vectorized_point[lane];
+              Point<dim, NumberType> qp;
+              for (unsigned int d = 0; d < dim; ++d) // different access for each dimension
+                qp[d] = vectorized_point[d][lane];
               //evaluate coefficients
               const NumberType mu_value = mu_function.value(qp);
               const NumberType gamma_value = gamma_function.value(qp);
-              const Tensor<1, dim, NumberType> beta_value = beta_function.value(qp);
-              //pointwise evaluation of div(beta)
-              const Tensor<2, dim, NumberType> beta_grad = beta_function.gradient(qp);
-              const NumberType div_beta_value = trace(beta_grad);
+              Tensor<1, dim, NumberType> beta_value;
+              // beta is a vector function
+              for (unsigned int d = 0; d < dim; ++d)
+                beta_value[d] = beta_function.value(qp,d);
+              //pointwise evaluation of div(beta) (tensor divergence)
+              NumberType div_beta_value = 0.0;
+              for (unsigned int d = 0; d < dim; ++d)
+                div_beta_value += beta_function.gradient(qp,d)[d];
 
               // fill tables
               mu(cell, q)[lane] = mu_value;
@@ -202,3 +208,5 @@ template <int dim, int fe_degree, std::floating_point NumberType>
       }
     phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
   }
+  // Explicit template instantiations
+  template class ADROperator<2, 1, double>;

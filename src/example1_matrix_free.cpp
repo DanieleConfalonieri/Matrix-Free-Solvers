@@ -44,6 +44,12 @@ int main(int argc, char **argv)
   typename MatrixFree<dim, NumberType>::AdditionalData additional_data;
   additional_data.tasks_parallel_scheme = MatrixFree<dim, NumberType>::AdditionalData::none;
 
+  //we need to request the update of quadrature points to evaluate coefficients there
+  additional_data.mapping_update_flags = (update_values |
+                                          update_gradients |
+                                          update_JxW_values |
+                                          update_quadrature_points);
+
   matrix_free_data->reinit(mapping, dof_handler, constraints, QGauss<1>(fe_degree + 1), additional_data);
 
   std::cout << "MatrixFree initialized. Cells: " << triangulation.n_active_cells() << std::endl;
@@ -63,7 +69,7 @@ int main(int argc, char **argv)
   std::vector<double> beta_vec_val(dim, 1.0); // beta = [1.0, 1.0]
   Functions::ConstantFunction<dim, NumberType> beta_func(beta_vec_val);
 
-  adr_op.evaluate_coefficient(mu_func, beta_func, gamma_func);
+  adr_op.evaluate_coefficients(mu_func, beta_func, gamma_func);
 
   std::cout << "evaluate_coefficient passed!" << std::endl;
   
