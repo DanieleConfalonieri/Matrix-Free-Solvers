@@ -35,6 +35,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
   void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
   {
     Timer time;
+    pcout << "Setting up system..." << std::endl;
     setup_time = 0.0;
     {
       system_matrix.clear();
@@ -95,90 +96,137 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     // Classical RHS assembly with FEEvaluation since it's performed only once
     Timer time;
     
-    system_rhs = 0;
-    // Quadrature and FEEvaluation setup
-    const QGauss<dim> quadrature_formula(fe_degree + 1);
-    const QGauss<dim-1> face_quadrature_formula(fe_degree + 1);
+    pcout << "Assembling right hand side..." <<  std::endl;
+    {
+      system_rhs = 0;
+      // Quadrature and FEEvaluation setup
+      const QGauss<dim> quadrature_formula(fe_degree + 1);
+      const QGauss<dim-1> face_quadrature_formula(fe_degree + 1);
 
-    FEValues<dim> fe_values (
-      fe,
-      quadrature_formula,
-      update_values | update_quadrature_points | update_JxW_values
-    );
+      FEValues<dim> fe_values (
+        fe,
+        quadrature_formula,
+        update_values | update_quadrature_points | update_JxW_values
+      );
 
-    FEFaceValues<dim> fe_face_values (
-      fe,
-      face_quadrature_formula,
-      update_values | update_quadrature_points | update_JxW_values | update_boundary_forms
-    );
+      FEFaceValues<dim> fe_face_values (
+        fe,
+        face_quadrature_formula,
+        update_values | update_quadrature_points | update_JxW_values | update_boundary_forms
+      );
 
-    const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
-    const unsigned int n_q_points    = quadrature_formula.size();
-    const unsigned int n_face_q_points = face_quadrature_formula.size();
+      const unsigned int dofs_per_cell = fe.n_dofs_per_cell();
+      const unsigned int n_q_points    = quadrature_formula.size();
+      const unsigned int n_face_q_points = face_quadrature_formula.size();
 
-    // Local RHS vector
-    Vector<NumberType> cell_rhs (dofs_per_cell);
-    std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
+      // Local RHS vector
+      Vector<NumberType> cell_rhs (dofs_per_cell);
+      std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
-    // Vector to hold function values at quadrature points
-    std::vector<NumberType> forcing_values (n_q_points);
-    std::vector<NumberType> neumann_values (n_face_q_points);
-    std::vector<NumberType> mu_boundary_values (n_face_q_points); //mu is needed on boundary for Neumann BCs
+      // Vector to hold function values at quadrature points
+      std::vector<NumberType> forcing_values (n_q_points);
+      std::vector<NumberType> neumann_values (n_face_q_points);
+      std::vector<NumberType> mu_boundary_values (n_face_q_points); //mu is needed on boundary for Neumann BCs
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      {
-        if (cell->is_locally_owned())
+      for (const auto &cell : dof_handler.active_cell_iterators())
         {
-          cell_rhs = 0;
-          fe_values.reinit(cell);
+          if (cell->is_locally_owned())
+          {
+            cell_rhs = 0;
+            fe_values.reinit(cell);
 
-          // Get forcing function values at quadrature points
-          forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
+            // Get forcing function values at quadrature points
+            forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
 
-          // Volume integral: f*v
-          for (unsigned int q=0; q<n_q_points; ++q)
-            {
-              const NumberType jxw = fe_values.JxW(q);
-              for (unsigned int i=0; i<dofs_per_cell; ++i)
-                {
-                  cell_rhs(i) += fe_values.shape_value(i, q) *
-                                forcing_values[q] *
-                                jxw;
-                }
-            }
-
-          // Neumann BCs: mu*h*v
-          for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
-            {
-              if (cell->at_boundary(face_no) &&
-                  cell->face(face_no)->boundary_id() == neumann_boundary_id) 
-                    {
-                      fe_face_values.reinit(cell, face_no);
-                      // Evaluate Neumann function and mu at face quadrature points
-                      neumann_function->value_list(fe_face_values.get_quadrature_points(), neumann_values);
-                      mu_function->value_list(fe_face_values.get_quadrature_points(), mu_boundary_values);
-
-                      for (unsigned int q=0; q<n_face_q_points; ++q)
-                        {
-                          const NumberType jxw = fe_face_values.JxW(q);
-                          const NumberType neumann_term = mu_boundary_values[q] * neumann_values[q];
-                          for (unsigned int i=0; i<dofs_per_cell; ++i)
-                            {
-                              cell_rhs(i) += fe_face_values.shape_value(i, q) *
-                                            neumann_term *
-                                            jxw;
-                            }
-                        }
-                    }
+            // Volume integral: f*v
+            for (unsigned int q=0; q<n_q_points; ++q)
+              {
+                const NumberType jxw = fe_values.JxW(q);
+                for (unsigned int i=0; i<dofs_per_cell; ++i)
+                  {
+                    cell_rhs(i) += fe_values.shape_value(i, q) *
+                                  forcing_values[q] *
+                                  jxw;
+                  }
               }
-              cell->get_dof_indices(local_dof_indices);
-              constraints.distribute_local_to_global(cell_rhs, local_dof_indices, system_rhs);
+
+            // Neumann BCs: mu*h*v
+            for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
+              {
+                if (cell->at_boundary(face_no) &&
+                    cell->face(face_no)->boundary_id() == neumann_boundary_id) 
+                      {
+                        fe_face_values.reinit(cell, face_no);
+                        // Evaluate Neumann function and mu at face quadrature points
+                        neumann_function->value_list(fe_face_values.get_quadrature_points(), neumann_values);
+                        mu_function->value_list(fe_face_values.get_quadrature_points(), mu_boundary_values);
+
+                        for (unsigned int q=0; q<n_face_q_points; ++q)
+                          {
+                            const NumberType jxw = fe_face_values.JxW(q);
+                            const NumberType neumann_term = mu_boundary_values[q] * neumann_values[q];
+                            for (unsigned int i=0; i<dofs_per_cell; ++i)
+                              {
+                                cell_rhs(i) += fe_face_values.shape_value(i, q) *
+                                              neumann_term *
+                                              jxw;
+                              }
+                          }
+                      }
+                }
+                cell->get_dof_indices(local_dof_indices);
+                constraints.distribute_local_to_global(cell_rhs, local_dof_indices, system_rhs);
+          }
         }
-      }
 
-          system_rhs.compress(VectorOperation::add);
-
-          setup_time += time.wall_time();
-          time_details << "Assemble right hand side   (CPU/wall) " << time.cpu_time()
-                   << "s/" << time.wall_time() << 's' << std::endl;
+            system_rhs.compress(VectorOperation::add);
     }
+    setup_time += time.wall_time();
+    time_details << "Assemble right hand side   (CPU/wall) " << time.cpu_time()
+              << "s/" << time.wall_time() << 's' << std::endl;
+    }
+
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
+  {
+    Timer time;
+    pcout << "Solving linear system..." << std::endl;
+    {
+      system_matrix.compute_diagonal();
+
+      const auto &inverse_diagonal = system_matrix.get_diagonal_inverse();
+      // Preconditioner: dst = D^{-1} * src
+      auto jacobi_preconditioner =
+        [&inverse_diagonal](VectorType &dst, const VectorType &src) {
+          dst.equ(1.0, src);
+          dst.scale(inverse_diagonal);
+        };
+      SolverControl solver_control (1000, 1e-12 * system_rhs.l2_norm());
+      //TODO distinguish between symmetric and non-symmetric solvers based on operator properties
+      SolverGMRES<VectorType> solver (solver_control);
+      constraints.set_zero(solution);
+      constraints.set_zero(system_rhs);
+
+      try{
+        solver.solve(system_matrix,
+                     solution,
+                     system_rhs,
+                     jacobi_preconditioner);
+      }
+      catch (const SolverControl::NoConvergence &e)
+      {
+        pcout << "Solver did not converge within "
+              << solver_control.last_step()
+              << " iterations. Last residual: "
+              << e.last_residual() << std::endl;
+        throw;
+      }
+      // Distribute constraints after interior solve
+      constraints.distribute(solution);
+      // Stats
+      pcout << "   Solved in " << solver_control.last_step()
+            << " iterations." << std::endl;
+    }
+    setup_time += time.wall_time();
+    time_details << "Solve linear system       (CPU/wall) " << time.cpu_time
+  }

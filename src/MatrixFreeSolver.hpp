@@ -42,6 +42,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
 class MatrixFreeSolver
 {
     public:
+    using VectorType = dealii::LinearAlgebra::distributed::Vector<NumberType>;
     MatrixFreeSolver(
         std::shared_ptr<const dealii::Function<dim, NumberType>> mu_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> beta_func,
