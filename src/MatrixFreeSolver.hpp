@@ -48,7 +48,10 @@ class MatrixFreeSolver
         std::shared_ptr<const dealii::Function<dim, NumberType>> beta_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> gamma_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> forcing_func,
-        std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func
+        std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func,
+        std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_func,
+        const std::set<dealii::types::boundary_id> &dirichlet_b_ids,
+        const std::set<dealii::types::boundary_id> &neumann_b_ids
     );
     void run();
 
@@ -83,8 +86,12 @@ class MatrixFreeSolver
     // RHS
     std::shared_ptr<const dealii::Function<dim, NumberType>> forcing_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_function;
-    const unsigned int neumann_boundary_id = 1; // Assuming boundary_id 1 is Neumann
+    std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_function;
     
+    // Boundary conditions
+    std::set<dealii::types::boundary_id> dirichlet_ids;
+    std::set<dealii::types::boundary_id> neumann_ids;
+
     /*
     MG related members
     */

@@ -7,7 +7,10 @@ template <int dim, int fe_degree, std::floating_point NumberType>
         std::shared_ptr<const dealii::Function<dim, NumberType>> beta_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> gamma_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> forcing_func,
-        std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func
+        std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func,
+        std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_func,
+        const std::set<dealii::types::boundary_id> &dirichlet_b_ids,
+        const std::set<dealii::types::boundary_id> &neumann_b_ids
   )
 #ifdef DEAL_II_WITH_P4EST
     : triangulation(MPI_COMM_WORLD, 
@@ -23,6 +26,9 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     , gamma_function(gamma_func)
     , forcing_function(forcing_func)
     , neumann_function(neumann_func)
+    , dirichlet_function(dirichlet_func)
+    , dirichlet_ids(dirichlet_b_ids)
+    , neumann_ids(neumann_b_ids)
     , setup_time(0.0)
     , pcout(std::cout,
             (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
@@ -37,6 +43,9 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     pcout << "Setting up system..." << std::endl;
     setup_time = 0.0;
     {
+      GridGenerator::hyper_cube(triangulation, 0.0, 1.0,true);
+      triangulation.refine_global(4); 
+
       system_matrix.clear();
 
       dof_handler.distribute_dofs(fe);
@@ -46,8 +55,16 @@ template <int dim, int fe_degree, std::floating_point NumberType>
 
       constraints.clear();
       constraints.reinit(DoFTools::extract_locally_relevant_dofs(dof_handler));
+      // Apply Dirichlet boundary conditions
+      std::map<types::global_dof_index, NumberType> boundary_values;
+      std::map<types::boundary_id, const Function<dim, NumberType> *> boundary_functions;
+      for (const auto &b_id : dirichlet_ids)
+        boundary_functions[b_id] = dirichlet_function.get();
       VectorTools::interpolate_boundary_values(
-        mapping, dof_handler, 0, Functions::ZeroFunction<dim, NumberType>(), constraints);
+        mapping,
+        dof_handler,
+        boundary_functions,
+        constraints);
       constraints.close();
     }
     setup_time += time.wall_time();
@@ -152,7 +169,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
             for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
               {
                 if (cell->at_boundary(face_no) &&
-                    cell->face(face_no)->boundary_id() == neumann_boundary_id) 
+                    neumann_ids.contains(cell->face(face_no)->boundary_id())) 
                       {
                         fe_face_values.reinit(cell, face_no);
                         // Evaluate Neumann function and mu at face quadrature points
@@ -278,3 +295,4 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     output_results(0);
   }
   template class MatrixFreeSolver<2, 2, double>;
+  template class MatrixFreeSolver<3, 2, double>;

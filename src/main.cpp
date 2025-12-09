@@ -8,7 +8,7 @@ int main (int argc, char *argv[])
         using namespace dealii;
         Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, 1);
 
-        const unsigned int dimension = 2;
+        const unsigned int dimension = 3;
         const unsigned int degree_finite_element = 2;
 
         std::vector<double> beta_vector(dimension, 0.0); 
@@ -21,7 +21,10 @@ int main (int argc, char *argv[])
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(beta_vector), // beta
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0), // gamma
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0), // forcing
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0)  // neumann
+                            std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0),  // neumann
+                            std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0),  // dirichlet
+                            std::set<types::boundary_id>{0}, // dirichlet boundary ids
+                            std::set<types::boundary_id>{1}  // neumann boundary ids
                         );
 
         matrix_free_solver.run();

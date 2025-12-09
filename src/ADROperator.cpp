@@ -180,3 +180,4 @@ template <int dim, int fe_degree, std::floating_point NumberType>
   // Explicit template instantiations
   template class ADROperator<2, 1, double>;
   template class ADROperator<2, 2, double>;
+  template class ADROperator<3, 2, double>;
