@@ -14,7 +14,7 @@
 #include <deal.II/base/timer.h>
  
 #include <deal.II/lac/affine_constraints.h>
-#include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
  

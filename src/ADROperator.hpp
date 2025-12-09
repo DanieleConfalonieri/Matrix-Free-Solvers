@@ -1,3 +1,5 @@
+#ifndef ADR_OPERATOR_HPP
+#define ADR_OPERATOR_HPP
 #include <concepts>
 #include <iostream>
 #include <fstream>
@@ -69,3 +71,4 @@ class ADROperator
     dealii::Table<2, dealii::VectorizedArray<NumberType>> mu, gamma_eff; //gamma_eff = gamma + div(beta)
     dealii::Table<2, dealii::Tensor<1, dim, dealii::VectorizedArray<NumberType>>> beta;
 };
+#endif 

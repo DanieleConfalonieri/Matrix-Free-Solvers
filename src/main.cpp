@@ -8,7 +8,7 @@ int main (int argc, char *argv[])
         using namespace dealii;
         Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, 1);
 
-        const unsigned int dimension = 3;
+        const unsigned int dimension = 2;
         const unsigned int degree_finite_element = 2;
 
         std::vector<double> beta_vector(dimension, 0.0); 

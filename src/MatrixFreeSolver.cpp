@@ -16,7 +16,6 @@ template <int dim, int fe_degree, std::floating_point NumberType>
 #else
     : triangulation(Triangulation<dim>::limit_level_difference_at_vertices)
 #endif
-    :
     , fe(fe_degree)
     , dof_handler(triangulation)
     , mu_function(mu_func)
@@ -46,8 +45,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
             << std::endl;
 
       constraints.clear();
-      constraints.reinit(dof_handler.locally_owned_dofs(),
-                        DoFTools::extract_locally_relevant_dofs(dof_handler));
+      constraints.reinit(DoFTools::extract_locally_relevant_dofs(dof_handler));
       VectorTools::interpolate_boundary_values(
         mapping, dof_handler, 0, Functions::ZeroFunction<dim, NumberType>(), constraints);
       constraints.close();
@@ -194,12 +192,12 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     {
       system_matrix.compute_diagonal();
 
-      const auto &inverse_diagonal = system_matrix.get_diagonal_inverse();
+      const auto &inverse_diagonal = system_matrix.get_matrix_diagonal_inverse();
       // Preconditioner: dst = D^{-1} * src
       auto jacobi_preconditioner =
         [&inverse_diagonal](VectorType &dst, const VectorType &src) {
           dst.equ(1.0, src);
-          dst.scale(inverse_diagonal);
+          dst.scale(inverse_diagonal->get_vector());
         };
       SolverControl solver_control (1000, 1e-12 * system_rhs.l2_norm());
       //TODO distinguish between symmetric and non-symmetric solvers based on operator properties
@@ -217,8 +215,7 @@ template <int dim, int fe_degree, std::floating_point NumberType>
       {
         pcout << "Solver did not converge within "
               << solver_control.last_step()
-              << " iterations. Last residual: "
-              << e.last_residual() << std::endl;
+              << std::endl;
         throw;
       }
       // Distribute constraints after interior solve
@@ -228,7 +225,8 @@ template <int dim, int fe_degree, std::floating_point NumberType>
             << " iterations." << std::endl;
     }
     setup_time += time.wall_time();
-    time_details << "Solve linear system       (CPU/wall) " << time.cpu_time
+    time_details << "Solve linear system       (CPU/wall) " << time.cpu_time()
+                 << "s/" << time.wall_time() << 's' << std::endl;
   }
 
   template <int dim, int fe_degree, std::floating_point NumberType>
@@ -269,3 +267,4 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     solve();
     output_results(0);
   }
+  template class MatrixFreeSolver<2, 2, double>;
