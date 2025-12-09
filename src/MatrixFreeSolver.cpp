@@ -194,11 +194,21 @@ template <int dim, int fe_degree, std::floating_point NumberType>
 
       const auto &inverse_diagonal = system_matrix.get_matrix_diagonal_inverse();
       // Preconditioner: dst = D^{-1} * src
-      auto jacobi_preconditioner =
-        [&inverse_diagonal](VectorType &dst, const VectorType &src) {
+      
+      // local struct to handle GMRES preconditioning
+      struct JacobiPreconditioner
+      {
+        const VectorType &inv_diagonal;
+        void vmult(VectorType &dst,
+                   const VectorType &src) const
+        {
           dst.equ(1.0, src);
-          dst.scale(inverse_diagonal->get_vector());
-        };
+          dst.scale(inv_diagonal);
+        }
+      };
+
+      JacobiPreconditioner jacobi_preconditioner{inverse_diagonal->get_vector()};
+
       SolverControl solver_control (1000, 1e-12 * system_rhs.l2_norm());
       //TODO distinguish between symmetric and non-symmetric solvers based on operator properties
       SolverGMRES<VectorType> solver (solver_control);
