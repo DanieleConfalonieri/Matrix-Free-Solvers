@@ -230,3 +230,42 @@ template <int dim, int fe_degree, std::floating_point NumberType>
     setup_time += time.wall_time();
     time_details << "Solve linear system       (CPU/wall) " << time.cpu_time
   }
+
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned int cycle)
+  {
+    Timer time;
+    pcout << "Outputting results..." << std::endl;
+    {
+      DataOut<dim> data_out;
+
+      solution.update_ghost_values();
+      data_out.attach_dof_handler(dof_handler);
+      data_out.add_data_vector(solution, "solution");
+      data_out.build_patches(mapping);
+
+      DataOutBase::VtkFlags vtk_flags;
+      vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
+      data_out.set_flags(vtk_flags);
+      data_out.write_vtu_with_pvtu_record(
+        "./",
+        "solution",
+        cycle,
+        MPI_COMM_WORLD,
+        2
+      );
+    }
+    setup_time += time.wall_time();
+    time_details << "Output results            (CPU/wall) " << time.cpu_time()
+                 << "s/" << time.wall_time() << 's' << std::endl;
+  }
+
+  template <int dim, int fe_degree, std::floating_point NumberType>
+  void MatrixFreeSolver<dim, fe_degree, NumberType>::run()
+  {
+    pcout << "Running MatrixFreeSolver..." << std::endl;
+    setup_system();
+    assemble_rhs();
+    solve();
+    output_results(0);
+  }

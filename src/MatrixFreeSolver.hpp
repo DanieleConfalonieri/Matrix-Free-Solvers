@@ -56,7 +56,7 @@ class MatrixFreeSolver
     void setup_system();
     void assemble_rhs();
     void solve();
-    void output_results() const;
+    void output_results(const unsigned int cycle);
 
 #ifdef DEAL_II_WITH_P4EST
     dealii::parallel::distributed::Triangulation<dim> triangulation{MPI_COMM_WORLD};
