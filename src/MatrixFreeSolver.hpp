@@ -42,7 +42,11 @@ template <int dim, int fe_degree, std::floating_point NumberType>
 class MatrixFreeSolver
 {
     public:
-    MatrixFreeSolver() = default;
+    MatrixFreeSolver(
+        std::shared_ptr<const dealii::Function<dim, NumberType>> mu_func,
+        std::shared_ptr<const dealii::Function<dim, NumberType>> beta_func,
+        std::shared_ptr<const dealii::Function<dim, NumberType>> gamma_func
+    );
     void run();
 
     private:
@@ -68,6 +72,11 @@ class MatrixFreeSolver
         ADROperator<dim, fe_degree, NumberType>;
     SystemMatrixType system_matrix;
 
+    // Physics related members
+    std::shared_ptr<const dealii::Function<dim, NumberType>> mu_function;
+    std::shared_ptr<const dealii::Function<dim, NumberType>> beta_function;
+    std::shared_ptr<const dealii::Function<dim, NumberType>> gamma_function;
+    
     /*
     MG related members
     */
