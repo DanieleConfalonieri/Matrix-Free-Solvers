@@ -1,26 +1,15 @@
 #include "MatrixFreeSolver.hpp"
+#include <deal.II/lac/solver_cg.h>
 
 using namespace dealii;
 
 /**
  * @file MatrixFreeSolver.cpp
- * @brief Implementation of the MatrixFreeSolver class for solving the Advection-Diffusion-Reaction equation.
+ * @brief Minimal implementation of the matrix-free ADR solver.
  */
 
 /**
- * @brief Constructor.
- *
- * Initializes the parallel triangulation, Finite Element system, and DoF handler.
- * It also stores shared pointers to the physical coefficient functions and boundary conditions.
- *
- * @param mu_func Diffusion coefficient.
- * @param beta_func Advection field.
- * @param gamma_func Reaction coefficient.
- * @param forcing_func Forcing term (RHS).
- * @param neumann_func Neumann boundary condition value.
- * @param dirichlet_func Dirichlet boundary condition value.
- * @param dirichlet_b_ids Set of boundary IDs for Dirichlet BCs.
- * @param neumann_b_ids Set of boundary IDs for Neumann BCs.
+ * @brief Construct solver with problem coefficients and boundary ids.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
 MatrixFreeSolver<dim, fe_degree, NumberType>::MatrixFreeSolver(
@@ -54,18 +43,11 @@ MatrixFreeSolver<dim, fe_degree, NumberType>::MatrixFreeSolver(
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
   , time_details(std::cout,
-                 (false && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) // Change false to true for profiling
+                 (false && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) 
 {}
 
 /**
  * @brief Sets up the grid, DoFs, and MatrixFree structures.
- *
- * Steps performed:
- * 1. Generates a hypercube grid and refines it globally.
- * 2. Distributes Degrees of Freedom (DoFs).
- * 3. Computes AffineConstraints (Dirichlet BCs and hanging nodes).
- * 4. Initializes the `MatrixFree` object for vectorized evaluation.
- * 5. Pre-evaluates PDE coefficients (mu, beta, gamma) for the matrix-free operator.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
@@ -139,25 +121,12 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
   setup_time += time.wall_time();
   time_details << "Setup matrix-free system   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
   time.restart();
-  {
-    /*
-     * MG setup would go here if multigrid is implemented.
-     */
-  }
   setup_time += time.wall_time();
   time_details << "Setup matrix-free levels   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
 }
 
 /**
  * @brief Assembles the global Right-Hand Side (RHS) vector.
- *
- * Computes:
- * \f[
- * F_i = \int_\Omega f \phi_i \, dx + \int_{\Gamma_N} \mu h \phi_i \, ds
- * \f]
- *
- * Uses standard `FEValues` and `FEFaceValues` iteration since this operation is done only once
- * and is not the performance bottleneck.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
@@ -195,7 +164,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
     // Buffers for function values
     std::vector<NumberType> forcing_values (n_q_points);
     std::vector<NumberType> neumann_values (n_face_q_points);
-    std::vector<NumberType> mu_boundary_values (n_face_q_points); // mu is needed for flux: mu * grad u * n = mu * h
+    std::vector<NumberType> mu_boundary_values (n_face_q_points); 
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
@@ -234,7 +203,6 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
                         {
                           const NumberType jxw = fe_face_values.JxW(q);
                           // The flux term is \mu \nabla u \cdot n = \mu h (assuming standard flux definition)
-                          // Ensure consistency with the problem definition for "h"
                           const NumberType neumann_term = mu_boundary_values[q] * neumann_values[q];
                           
                           for (unsigned int i=0; i<dofs_per_cell; ++i)
@@ -261,10 +229,11 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
   }
 
 /**
- * @brief Solves the linear system using GMRES and a Jacobi preconditioner.
- *
- * Uses `SolverGMRES` suitable for non-symmetric systems (due to advection).
- * The preconditioner approximates the inverse using the diagonal of the operator matrix.
+ * @brief Solves the linear system checking for Advection.
+ * * Logic:
+ * - If Beta == 0 (Symmetric): Use CG Solver.
+ * - If Beta != 0 (Non-Symmetric): Use GMRES Solver.
+ * * In both cases, a simple Jacobi Preconditioner (Inverse Diagonal) is used.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
@@ -274,7 +243,6 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
   {
     // Compute the diagonal approximation for preconditioning
     system_matrix.compute_diagonal();
-
     const auto &inverse_diagonal = system_matrix.get_matrix_diagonal_inverse();
     
     // Simple local struct to apply Jacobi preconditioning: dst = D^{-1} * src
@@ -291,22 +259,32 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
 
     JacobiPreconditioner jacobi_preconditioner{inverse_diagonal->get_vector()};
 
-    // Solver Control: Max 1000 iters or reduction by 1e-12
+    // Analysis of advection Term (Beta)
+    bool is_advection_zero = true;
+    for (unsigned int d = 0; d < dim; ++d) {
+      if (std::abs(beta_function->value(Point<dim>(), d)) > 1e-12) {
+        is_advection_zero = false;
+        break;
+      }
+    }
+
+    // Solver configuration
     SolverControl solver_control (1000, 1e-12 * system_rhs.l2_norm());
-    
-    // Using GMRES as the system is generally non-symmetric
-    SolverGMRES<VectorType> solver (solver_control);
-    
-    // Reset vectors (apply constraints to zero for the system solve)
     constraints.set_zero(solution);
-    // Note: constraints are already applied to system_rhs during assembly/distribution
-    // but ensure hanging node constraints are consistent on RHS if needed.
-    
-    try{
-      solver.solve(system_matrix,
-                   solution,
-                   system_rhs,
-                   jacobi_preconditioner);
+
+    try {
+      if (is_advection_zero)
+      {
+        pcout << "   -> Problema Simmetrico (Beta=0): Utilizzo Solver CG + Jacobi" << std::endl;
+        SolverCG<VectorType> solver(solver_control);
+        solver.solve(system_matrix, solution, system_rhs, jacobi_preconditioner);
+      }
+      else
+      {
+        pcout << "   -> Problema Asimmetrico (Beta!=0): Utilizzo Solver GMRES + Jacobi" << std::endl;
+        SolverGMRES<VectorType> solver(solver_control);
+        solver.solve(system_matrix, solution, system_rhs, jacobi_preconditioner);
+      }
     }
     catch (const SolverControl::NoConvergence &e)
     {
@@ -330,11 +308,6 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
 
 /**
  * @brief Outputs the results to VTU files.
- *
- * Can run in parallel using PVTU records. The output includes ghost values
- * to ensure correct visualization at partition boundaries.
- *
- * @param cycle Cycle number appended to the filename (e.g., solution_0.vtu).
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned int cycle)

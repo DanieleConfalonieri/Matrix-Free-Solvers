@@ -7,21 +7,6 @@ using namespace dealii;
  * @brief Implementation of the MatrixFreeSolver using MultiGrid as a Preconditioner, class for solving the Advection-Diffusion-Reaction equation.
  */
 
-/**
- * @brief Constructor.
- *
- * Initializes the parallel triangulation, Finite Element system, and DoF handler.
- * It also stores shared pointers to the physical coefficient functions and boundary conditions.
- *
- * @param mu_func Diffusion coefficient.
- * @param beta_func Advection field.
- * @param gamma_func Reaction coefficient.
- * @param forcing_func Forcing term (RHS).
- * @param neumann_func Neumann boundary condition value.
- * @param dirichlet_func Dirichlet boundary condition value.
- * @param dirichlet_b_ids Set of boundary IDs for Dirichlet BCs.
- * @param neumann_b_ids Set of boundary IDs for Neumann BCs.
- */
 template <int dim, int fe_degree, std::floating_point NumberType>
 MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
       std::shared_ptr<const dealii::Function<dim, NumberType>> mu_func,
@@ -36,7 +21,7 @@ MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
 #ifdef DEAL_II_WITH_P4EST
   : triangulation(MPI_COMM_WORLD, 
                   Triangulation<dim>::limit_level_difference_at_vertices,
-                  parallel::distributed::Triangulation<dim>::Settings::default_setting)
+                  parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy)
 #else
   : triangulation(Triangulation<dim>::limit_level_difference_at_vertices)
 #endif
@@ -54,19 +39,9 @@ MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
   , time_details(std::cout,
-                 (false && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) // Change false to true for profiling
+                 (true && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) // Change false to true for profiling
 {}
 
-/**
- * @brief Sets up the grid, DoFs, and MatrixFree structures.
- *
- * Steps performed:
- * 1. Generates a hypercube grid and refines it globally.
- * 2. Distributes Degrees of Freedom (DoFs).
- * 3. Computes AffineConstraints (Dirichlet BCs and hanging nodes).
- * 4. Initializes the `MatrixFree` object for vectorized evaluation.
- * 5. Pre-evaluates PDE coefficients (mu, beta, gamma) for the matrix-free operator.
- */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
 {
@@ -79,9 +54,11 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
     triangulation.refine_global(4); 
 
     system_matrix.clear();
+    mg_matrices.clear_elements(); // Added for MG
 
     // 2. DoF Distribution
     dof_handler.distribute_dofs(fe);
+    dof_handler.distribute_mg_dofs(); // Added for MG
 
     pcout << "Number of degrees of freedom: " << dof_handler.n_dofs()
           << std::endl;
@@ -139,48 +116,69 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
   setup_time += time.wall_time();
   time_details << "Setup matrix-free system   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
   time.restart();
+  
+  // Geometric multigrid setup
   {
-    /*
-     * MG setup would go here if multigrid is implemented.
-     */
+    const unsigned int nlevels = triangulation.n_global_levels();
+    mg_matrices.resize(0, nlevels - 1);
+
+    mg_constrained_dofs.initialize(dof_handler);
+    mg_constrained_dofs.make_zero_boundary_constraints(dof_handler, dirichlet_ids);
+
+    for (unsigned int level = 0; level < nlevels; ++level)
+      {
+        // Initialize level constraints using locally relevant DoFs
+        AffineConstraints<NumberType> level_constraints(
+          DoFTools::extract_locally_relevant_level_dofs(dof_handler, level));
+        
+        for (const types::global_dof_index dof_index : mg_constrained_dofs.get_boundary_indices(level))
+          level_constraints.add_line(dof_index);
+        level_constraints.close();
+
+        typename MatrixFree<dim, NumberType>::AdditionalData additional_data;
+        additional_data.tasks_parallel_scheme =
+          MatrixFree<dim, NumberType>::AdditionalData::none;
+        additional_data.mapping_update_flags =
+          (update_values | update_gradients | update_JxW_values | update_quadrature_points);
+        additional_data.mg_level = level;
+        
+        std::shared_ptr<MatrixFree<dim, NumberType>> mg_mf_storage_level =
+          std::make_shared<MatrixFree<dim, NumberType>>();
+          
+        mg_mf_storage_level->reinit(mapping,
+                                    dof_handler,
+                                    level_constraints,
+                                    QGauss<1>(fe.degree + 1),
+                                    additional_data);
+
+        mg_matrices[level].initialize(mg_mf_storage_level, mg_constrained_dofs, level);
+        // Evaluate coefficients for this level
+        mg_matrices[level].evaluate_coefficients(*mu_function, *beta_function, *gamma_function);
+      }
   }
+  // ---------------------------------------------------------
+
   setup_time += time.wall_time();
   time_details << "Setup matrix-free levels   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
 }
 
-/**
- * @brief Assembles the global Right-Hand Side (RHS) vector.
- *
- * Computes:
- * \f[
- * F_i = \int_\Omega f \phi_i \, dx + \int_{\Gamma_N} \mu h \phi_i \, ds
- * \f]
- *
- * Uses standard `FEValues` and `FEFaceValues` iteration since this operation is done only once
- * and is not the performance bottleneck.
- */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::assemble_rhs()
 {
   Timer time;
-  
   pcout << "Assembling right hand side..." <<  std::endl;
   {
     system_rhs = 0;
-    
-    // Quadrature and FEValues setup
     const QGauss<dim> quadrature_formula(fe_degree + 1);
     const QGauss<dim-1> face_quadrature_formula(fe_degree + 1);
 
     FEValues<dim> fe_values (
-      fe,
-      quadrature_formula,
+      fe, quadrature_formula,
       update_values | update_quadrature_points | update_JxW_values
     );
 
     FEFaceValues<dim> fe_face_values (
-      fe,
-      face_quadrature_formula,
+      fe, face_quadrature_formula,
       update_values | update_quadrature_points | update_JxW_values | update_boundary_forms
     );
 
@@ -188,154 +186,209 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::assemble_rhs()
     const unsigned int n_q_points    = quadrature_formula.size();
     const unsigned int n_face_q_points = face_quadrature_formula.size();
 
-    // Local RHS vector and DoF indices
     Vector<NumberType> cell_rhs (dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
 
-    // Buffers for function values
     std::vector<NumberType> forcing_values (n_q_points);
     std::vector<NumberType> neumann_values (n_face_q_points);
-    std::vector<NumberType> mu_boundary_values (n_face_q_points); // mu is needed for flux: mu * grad u * n = mu * h
+    std::vector<NumberType> mu_boundary_values (n_face_q_points); 
 
     for (const auto &cell : dof_handler.active_cell_iterators())
+      if (cell->is_locally_owned())
       {
-        if (cell->is_locally_owned())
+        cell_rhs = 0;
+        fe_values.reinit(cell);
+
+        forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
+        for (unsigned int q=0; q<n_q_points; ++q)
         {
-          cell_rhs = 0;
-          fe_values.reinit(cell);
-
-          // Get forcing function values at quadrature points
-          forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
-
-          // Volume integral: \int f * v
-          for (unsigned int q=0; q<n_q_points; ++q)
-            {
-              const NumberType jxw = fe_values.JxW(q);
-              for (unsigned int i=0; i<dofs_per_cell; ++i)
-                {
-                  cell_rhs(i) += fe_values.shape_value(i, q) *
-                                forcing_values[q] *
-                                jxw;
-                }
-            }
-
-          // Neumann BCs: \int mu * h * v (since flux is defined as mu * du/dn)
-          for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
-            {
-              if (cell->at_boundary(face_no) &&
-                  neumann_ids.contains(cell->face(face_no)->boundary_id())) 
-                    {
-                      fe_face_values.reinit(cell, face_no);
-                      // Evaluate Neumann function (h) and diffusion (mu) at face quadrature points
-                      neumann_function->value_list(fe_face_values.get_quadrature_points(), neumann_values);
-                      mu_function->value_list(fe_face_values.get_quadrature_points(), mu_boundary_values);
-
-                      for (unsigned int q=0; q<n_face_q_points; ++q)
-                        {
-                          const NumberType jxw = fe_face_values.JxW(q);
-                          // The flux term is \mu \nabla u \cdot n = \mu h (assuming standard flux definition)
-                          // Ensure consistency with the problem definition for "h"
-                          const NumberType neumann_term = mu_boundary_values[q] * neumann_values[q];
-                          
-                          for (unsigned int i=0; i<dofs_per_cell; ++i)
-                            {
-                              cell_rhs(i) += fe_face_values.shape_value(i, q) *
-                                            neumann_term *
-                                            jxw;
-                            }
-                        }
-                    }
-              }
-              // Distribute local contribution to global vector
-              cell->get_dof_indices(local_dof_indices);
-              constraints.distribute_local_to_global(cell_rhs, local_dof_indices, system_rhs);
+          const NumberType jxw = fe_values.JxW(q);
+          for (unsigned int i=0; i<dofs_per_cell; ++i)
+            cell_rhs(i) += fe_values.shape_value(i, q) * forcing_values[q] * jxw;
         }
-      }
 
-      // Compress vector (communicate ghost values in parallel)
-      system_rhs.compress(VectorOperation::add);
+        for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
+          if (cell->at_boundary(face_no) && neumann_ids.contains(cell->face(face_no)->boundary_id()))
+          {
+            fe_face_values.reinit(cell, face_no);
+            neumann_function->value_list(fe_face_values.get_quadrature_points(), neumann_values);
+            mu_function->value_list(fe_face_values.get_quadrature_points(), mu_boundary_values);
+            for (unsigned int q=0; q<n_face_q_points; ++q)
+            {
+              const NumberType jxw = fe_face_values.JxW(q);
+              const NumberType neumann_term = mu_boundary_values[q] * neumann_values[q];
+              for (unsigned int i=0; i<dofs_per_cell; ++i)
+                cell_rhs(i) += fe_face_values.shape_value(i, q) * neumann_term * jxw;
+            }
+          }
+
+        cell->get_dof_indices(local_dof_indices);
+        constraints.distribute_local_to_global(cell_rhs, local_dof_indices, system_rhs);
+      }
+    system_rhs.compress(VectorOperation::add);
   }
   setup_time += time.wall_time();
   time_details << "Assemble right hand side   (CPU/wall) " << time.cpu_time()
             << "s/" << time.wall_time() << 's' << std::endl;
-  }
+}
 
-/**
- * @brief Solves the linear system using GMRES and a Jacobi preconditioner.
- *
- * Uses `SolverGMRES` suitable for non-symmetric systems (due to advection).
- * The preconditioner approximates the inverse using the diagonal of the operator matrix.
- */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
 {
   Timer time;
   pcout << "Solving linear system..." << std::endl;
   {
-    // Compute the diagonal approximation for preconditioning
     system_matrix.compute_diagonal();
 
-    const auto &inverse_diagonal = system_matrix.get_matrix_diagonal_inverse();
-    
-    // Simple local struct to apply Jacobi preconditioning: dst = D^{-1} * src
-    struct JacobiPreconditioner
-    {
-      const VectorType &inv_diagonal;
-      void vmult(VectorType &dst,
-                 const VectorType &src) const
-      {
-        dst.equ(1.0, src);
-        dst.scale(inv_diagonal);
+    // Check if advection is zero
+    bool is_advection_zero = true;
+    for (unsigned int d = 0; d < dim; ++d) {
+      if (std::abs(beta_function->value(Point<dim>(), d)) > 1e-12) {
+        is_advection_zero = false;
+        break;
       }
-    };
-
-    JacobiPreconditioner jacobi_preconditioner{inverse_diagonal->get_vector()};
-
-    // Solver Control: Max 1000 iters or reduction by 1e-12
-    SolverControl solver_control (1000, 1e-12 * system_rhs.l2_norm());
-    
-    // Using GMRES as the system is generally non-symmetric
-    SolverGMRES<VectorType> solver (solver_control);
-    
-    // Reset vectors (apply constraints to zero for the system solve)
-    constraints.set_zero(solution);
-    // Note: constraints are already applied to system_rhs during assembly/distribution
-    // but ensure hanging node constraints are consistent on RHS if needed.
-    
-    try{
-      solver.solve(system_matrix,
-                   solution,
-                   system_rhs,
-                   jacobi_preconditioner);
     }
-    catch (const SolverControl::NoConvergence &e)
+
+    if (is_advection_zero)
     {
-      pcout << "Solver did not converge within "
-            << solver_control.last_step()
-            << std::endl;
-      throw;
+      pcout << "   -> Symmetric problem: Chebyshev preconditioner + CG solver" << std::endl;
+
+      MGTransferMatrixFree<dim, NumberType> mg_transfer(mg_constrained_dofs);
+      mg_transfer.build(dof_handler);
+
+      using SmootherType = PreconditionChebyshev<LevelMatrixType, VectorType>;
+      mg::SmootherRelaxation<SmootherType, VectorType> mg_smoother;
+      
+      MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
+      smoother_data.resize(0, triangulation.n_global_levels() - 1);
+      
+      for (unsigned int level = 0; level < triangulation.n_global_levels(); ++level)
+      {
+          if (level > 0)
+            {
+              smoother_data[level].smoothing_range     = 15.;
+              smoother_data[level].degree              = 5;
+              smoother_data[level].eig_cg_n_iterations = 10;
+            }
+          else
+            {
+              smoother_data[0].smoothing_range = 1e-3;
+              smoother_data[0].degree          = numbers::invalid_unsigned_int;
+              smoother_data[0].eig_cg_n_iterations = mg_matrices[0].m();
+            }
+          mg_matrices[level].compute_diagonal();
+          smoother_data[level].preconditioner = mg_matrices[level].get_matrix_diagonal_inverse();
+        }
+      mg_smoother.initialize(mg_matrices, smoother_data);
+
+      MGCoarseGridApplySmoother<VectorType> mg_coarse;
+      mg_coarse.initialize(mg_smoother);
+
+      mg::Matrix<VectorType> mg_matrix(mg_matrices);
+
+      MGLevelObject<MatrixFreeOperators::MGInterfaceOperator<LevelMatrixType>> mg_interface_matrices;
+      mg_interface_matrices.resize(0, triangulation.n_global_levels() - 1);
+      
+      for (unsigned int level = 0; level < triangulation.n_global_levels(); ++level)
+        mg_interface_matrices[level].initialize(mg_matrices[level]);
+        
+      mg::Matrix<VectorType> mg_interface(mg_interface_matrices);
+
+      Multigrid<VectorType> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
+      mg.set_edge_matrices(mg_interface, mg_interface);
+
+      PreconditionMG<dim, VectorType, MGTransferMatrixFree<dim, NumberType>>
+        preconditioner(dof_handler, mg, mg_transfer);
+
+      SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
+      SolverCG<VectorType> solver(solver_control); // Use of CG
+      
+      constraints.set_zero(solution);
+      
+      try {
+        solver.solve(system_matrix, solution, system_rhs, preconditioner); 
+      }
+      catch (const SolverControl::NoConvergence &e) {
+        pcout << "Solver did not converge within " << solver_control.last_step() << std::endl;
+        throw;
+      }
+      
+      constraints.distribute(solution);
+      pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
     }
-    
-    // Distribute Dirichlet values to the solution vector
-    constraints.distribute(solution);
-    
-    // Stats
-    pcout << "   Solved in " << solver_control.last_step()
-          << " iterations." << std::endl;
+    else
+    {
+      pcout << "   -> Non-symmetric problem (advection): weighted Jacobi preconditioner + GMRES solver" << std::endl;
+
+      MGTransferMatrixFree<dim, NumberType> mg_transfer(mg_constrained_dofs);
+      mg_transfer.build(dof_handler);
+
+      // Use Chebyshev object to emulate a damped Jacobi smoother
+      using SmootherType = PreconditionChebyshev<LevelMatrixType, VectorType>;
+      mg::SmootherRelaxation<SmootherType, VectorType> mg_smoother;
+      
+      MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
+      smoother_data.resize(0, triangulation.n_global_levels() - 1);
+      
+      for (unsigned int level = 0; level < triangulation.n_global_levels(); ++level)
+        {
+          // Setup damped Jacobi (omega = 0.6)
+          smoother_data[level].degree = 1; // Grade 1 = Simple linear iteration
+          smoother_data[level].eig_cg_n_iterations = 0; // No eigenvalue estimation needed for fixed damping
+          smoother_data[level].max_eigenvalue = 1.0 / 0.6; // Corrisponding to omega = 0.6
+          
+          mg_matrices[level].compute_diagonal();
+          smoother_data[level].preconditioner = mg_matrices[level].get_matrix_diagonal_inverse();
+        }
+      mg_smoother.initialize(mg_matrices, smoother_data);
+
+      // Solver for the coarse grid (Iterative GMRES)
+      using CoarsePreconditionerType = DiagonalMatrix<VectorType>;
+      auto coarse_preconditioner = mg_matrices[0].get_matrix_diagonal_inverse();
+      
+      ReductionControl coarse_grid_control(1000, 1e-12, 1e-2);
+      SolverGMRES<VectorType> coarse_solver(coarse_grid_control);
+      MGCoarseGridIterativeSolver<VectorType, SolverGMRES<VectorType>, LevelMatrixType, CoarsePreconditionerType> 
+        mg_coarse(coarse_solver, mg_matrices[0], *coarse_preconditioner);
+
+      mg::Matrix<VectorType> mg_matrix(mg_matrices);
+
+      MGLevelObject<MatrixFreeOperators::MGInterfaceOperator<LevelMatrixType>> mg_interface_matrices;
+      mg_interface_matrices.resize(0, triangulation.n_global_levels() - 1);
+      
+      for (unsigned int level = 0; level < triangulation.n_global_levels(); ++level)
+        mg_interface_matrices[level].initialize(mg_matrices[level]);
+        
+      mg::Matrix<VectorType> mg_interface(mg_interface_matrices);
+
+      Multigrid<VectorType> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
+      mg.set_edge_matrices(mg_interface, mg_interface);
+
+      PreconditionMG<dim, VectorType, MGTransferMatrixFree<dim, NumberType>>
+        preconditioner(dof_handler, mg, mg_transfer);
+
+      SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
+      SolverGMRES<VectorType> solver(solver_control); // Use of GMRES
+      
+      constraints.set_zero(solution);
+      
+      try {
+        solver.solve(system_matrix, solution, system_rhs, preconditioner); 
+      }
+      catch (const SolverControl::NoConvergence &e) {
+        pcout << "Solver did not converge within " << solver_control.last_step() << std::endl;
+        throw;
+      }
+      
+      constraints.distribute(solution);
+      pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
+    }
   }
   setup_time += time.wall_time();
   time_details << "Solve linear system       (CPU/wall) " << time.cpu_time()
                << "s/" << time.wall_time() << 's' << std::endl;
 }
 
-/**
- * @brief Outputs the results to VTU files.
- *
- * Can run in parallel using PVTU records. The output includes ghost values
- * to ensure correct visualization at partition boundaries.
- *
- * @param cycle Cycle number appended to the filename (e.g., solution_0.vtu).
- */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsigned int cycle)
 {
@@ -343,25 +396,17 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
   pcout << "Outputting results..." << std::endl;
   {
     DataOut<dim> data_out;
-
-    // Ensure ghost values are present for output
     solution.update_ghost_values();
-    
     data_out.attach_dof_handler(dof_handler);
     data_out.add_data_vector(solution, "solution");
     data_out.build_patches(mapping);
 
-    // Set flags for efficient I/O
     DataOutBase::VtkFlags vtk_flags;
     vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
     data_out.set_flags(vtk_flags);
     
     data_out.write_vtu_with_pvtu_record(
-      "./",
-      "solution",
-      cycle,
-      MPI_COMM_WORLD,
-      2 // Number of digits in filename
+      "./", "solution", cycle, MPI_COMM_WORLD, 2
     );
   }
   setup_time += time.wall_time();
@@ -369,9 +414,6 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
                << "s/" << time.wall_time() << 's' << std::endl;
 }
 
-/**
- * @brief High-level function to run the simulation.
- */
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::run()
 {

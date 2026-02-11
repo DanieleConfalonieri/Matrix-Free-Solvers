@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_executable(adr_solver
     src/main.cpp                 # Il main della simulazione
     src/MatrixFreeSolver.cpp     # L'implementazione del solver (Decommentato!)
+    src/MatrixFreeSolverMG.cpp   # Implementation of MG-enabled solver
     src/ADROperator.cpp          # L'implementazione dell'operatore
     
     # Headers (Opzionali per la compilazione, utili per farli vedere agli IDE)
