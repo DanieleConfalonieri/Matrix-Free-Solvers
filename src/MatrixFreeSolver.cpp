@@ -20,7 +20,8 @@ MatrixFreeSolver<dim, fe_degree, NumberType>::MatrixFreeSolver(
       std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func,
       std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_func,
       const std::set<dealii::types::boundary_id> &dirichlet_b_ids,
-      const std::set<dealii::types::boundary_id> &neumann_b_ids
+      const std::set<dealii::types::boundary_id> &neumann_b_ids,
+      const unsigned int mesh_refinement_level
 )
 #ifdef DEAL_II_WITH_P4EST
   : triangulation(MPI_COMM_WORLD, 
@@ -39,11 +40,12 @@ MatrixFreeSolver<dim, fe_degree, NumberType>::MatrixFreeSolver(
   , dirichlet_function(dirichlet_func)
   , dirichlet_ids(dirichlet_b_ids)
   , neumann_ids(neumann_b_ids)
+  , mesh_refinement_level(mesh_refinement_level)
   , setup_time(0.0)
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
   , time_details(std::cout,
-                 (false && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) 
+                 (true && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) // Change false to true for profiling
 {}
 
 /**
@@ -58,7 +60,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
   {
     // 1. Grid Generation
     GridGenerator::hyper_cube(triangulation, 0.0, 1.0, true);
-    triangulation.refine_global(4); 
+    triangulation.refine_global(mesh_refinement_level);
 
     system_matrix.clear();
 
@@ -326,7 +328,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
 
     // Set flags for efficient I/O
     DataOutBase::VtkFlags vtk_flags;
-    vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
+    //vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed; commented out to avoid version issues
     data_out.set_flags(vtk_flags);
     
     data_out.write_vtu_with_pvtu_record(

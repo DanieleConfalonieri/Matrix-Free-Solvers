@@ -70,6 +70,7 @@ public:
      * @param dirichlet_func Shared pointer to the Dirichlet boundary value \f$ g \f$ where \f$ u = g \f$.
      * @param dirichlet_b_ids Set of boundary IDs where Dirichlet conditions are applied.
      * @param neumann_b_ids Set of boundary IDs where Neumann conditions are applied.
+     * @param mesh_refinement_level Global refinement level for the initial mesh.
      */
     MatrixFreeSolver(
         std::shared_ptr<const dealii::Function<dim, NumberType>> mu_func,
@@ -79,7 +80,8 @@ public:
         std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_func,
         const std::set<dealii::types::boundary_id> &dirichlet_b_ids,
-        const std::set<dealii::types::boundary_id> &neumann_b_ids
+        const std::set<dealii::types::boundary_id> &neumann_b_ids,
+        const unsigned int mesh_refinement_level = 4
     );
 
     /**
@@ -165,10 +167,14 @@ private:
     dealii::LinearAlgebra::distributed::Vector<NumberType> solution;
     dealii::LinearAlgebra::distributed::Vector<NumberType> system_rhs;
 
+    const unsigned int mesh_refinement_level; // Global refinement level for the initial mesh
+
+
     // --- Utilities ---
     NumberType setup_time;
     dealii::ConditionalOStream pcout;       ///< Stream for parallel output (prints only on rank 0).
     dealii::ConditionalOStream time_details;///< Stream for timing details.
+
 };
 
 #endif
