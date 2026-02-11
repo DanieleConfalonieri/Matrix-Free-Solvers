@@ -4,14 +4,21 @@
 #include <concepts>
 #include <iostream>
 #include <fstream>
-#include <memory> 
+#include <memory>
 #include <set>
 
 #include "ADROperator.hpp"
 
 /**
  * @file MatrixFreeSolverMG.hpp
- * @brief Matrix-free solver with multigrid preconditioner (declarations).
+ * @brief Matrix-free solver with Geometric Multigrid (GMG) preconditioner.
+ *
+ * This header declares the `MatrixFreeSolverMG` template class which is a
+ * variant of the matrix-free ADR solver that configures and exposes
+ * multigrid-specific data structures (per-level operators, constrained DoFs,
+ * and MG transfer utilities). The implementation focuses on building the
+ * MatrixFree operator and the multigrid level operators used as a preconditioner
+ * for an iterative Krylov solver.
  */
 
 #include <deal.II/base/quadrature_lib.h>
@@ -37,12 +44,36 @@
 #include <deal.II/matrix_free/operators.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
 
+/**
+ * @brief Matrix-free solver configured to use a geometric multigrid preconditioner.
+ *
+ * Template parameters:
+ * - `dim` : spatial dimension.
+ * - `fe_degree` : polynomial degree of the finite element space.
+ * - `NumberType` : floating point type (float/double).
+ *
+ * The class mirrors the responsibilities of `MatrixFreeSolver` while adding
+ * multigrid-specific members such as `mg_matrices` and `mg_constrained_dofs`.
+ */
 template <int dim, int fe_degree, std::floating_point NumberType>
 class MatrixFreeSolverMG
 {
 public:
+    /// Distributed vector type used by deal.II linear algebra wrappers.
     using VectorType = dealii::LinearAlgebra::distributed::Vector<NumberType>;
 
+    /**
+     * @brief Construct the MG-enabled matrix-free solver.
+     *
+     * @param mu_func Diffusion coefficient function (shared pointer).
+     * @param beta_func Advection field function (shared pointer).
+     * @param gamma_func Reaction coefficient function (shared pointer).
+     * @param forcing_func Volume forcing / source term (shared pointer).
+     * @param neumann_func Neumann boundary value function (shared pointer).
+     * @param dirichlet_func Dirichlet boundary value function (shared pointer).
+     * @param dirichlet_b_ids Set of boundary IDs to apply Dirichlet conditions.
+     * @param neumann_b_ids Set of boundary IDs to apply Neumann conditions.
+     */
     MatrixFreeSolverMG(
         std::shared_ptr<const dealii::Function<dim, NumberType>> mu_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> beta_func,
@@ -54,12 +85,31 @@ public:
         const std::set<dealii::types::boundary_id> &neumann_b_ids
     );
 
+    /**
+     * @brief Run the end-to-end simulation: setup, assemble, solve, output.
+     */
     void run();
 
 private:
+    /**
+     * @brief Create the mesh, distribute DoFs, initialize MatrixFree and MG data.
+     */
     void setup_system();
+
+    /**
+     * @brief Assemble the right-hand side vector (volume + Neumann contributions).
+     */
     void assemble_rhs();
+
+    /**
+     * @brief Solve the linear system using GMRES preconditioned with MG.
+     */
     void solve();
+
+    /**
+     * @brief Write solution output (VTU) for visualization.
+     * @param cycle The current cycle index (useful for time-stepping/adaptivity).
+     */
     void output_results(const unsigned int cycle);
 
 #ifdef DEAL_II_WITH_P4EST
@@ -72,12 +122,17 @@ private:
     dealii::DoFHandler<dim> dof_handler;
     const dealii::MappingQ1<dim> mapping;
 
+    /// Constraints for hanging nodes and Dirichlet boundary conditions.
     dealii::AffineConstraints<NumberType> constraints;
+
+    /// MatrixFree container used for operator evaluation.
     std::shared_ptr<dealii::MatrixFree<dim, NumberType>> matrix_free;
 
     using SystemMatrixType = ADROperator<dim, fe_degree, NumberType>;
+    /// The matrix-free realization of the ADR operator acting on vectors.
     SystemMatrixType system_matrix;
 
+    // Physics functions (coefficients and forcing).
     std::shared_ptr<const dealii::Function<dim, NumberType>> mu_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> beta_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> gamma_function;
@@ -86,18 +141,29 @@ private:
     std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_function;
     
+    // Boundary ID sets for applying boundary conditions.
     std::set<dealii::types::boundary_id> dirichlet_ids;
     std::set<dealii::types::boundary_id> neumann_ids;
 
+    /// MG-constrained DoFs helper (keeps track of constraints across levels).
     dealii::MGConstrainedDoFs mg_constrained_dofs;
     
     using LevelMatrixType = ADROperator<dim, fe_degree, NumberType>;
+    /**
+     * @brief Per-level operator objects used by the MG preconditioner.
+     *
+     * Each entry holds a level-local view of the matrix-free ADR operator.
+     */
     dealii::MGLevelObject<LevelMatrixType> mg_matrices;
 
+    /// Solution and RHS vectors (distributed when running in parallel).
     dealii::LinearAlgebra::distributed::Vector<NumberType> solution;
     dealii::LinearAlgebra::distributed::Vector<NumberType> system_rhs;
 
+    /// Timing of the setup phase (stored for reporting).
     NumberType setup_time;
+
+    /// Conditional output streams (print only on the master MPI rank).
     dealii::ConditionalOStream pcout;
     dealii::ConditionalOStream time_details;
 };

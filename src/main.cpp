@@ -23,7 +23,7 @@ int main (int argc, char *argv[])
 
         const unsigned int dimension = 3;
         const unsigned int degree_finite_element = 2;
-                const bool enableMultigrid = true; // Set to false to disable multigrid preconditioning
+        const bool enableMultigrid = true; // Set to false to disable multigrid preconditioning
 
         const unsigned int mesh_refinement_level = (argc > 1) ? std::stoi(argv[1]) : 4; // Adjust from command line for finer/coarser mesh
 

@@ -122,7 +122,7 @@ private:
      */
     void output_results(const unsigned int cycle);
 
-    // --- Mesh & FE Data ---
+    // Mesh & FE Data
 #ifdef DEAL_II_WITH_P4EST
     dealii::parallel::distributed::Triangulation<dim> triangulation{MPI_COMM_WORLD};
 #else
@@ -142,38 +142,31 @@ private:
     using SystemMatrixType = ADROperator<dim, fe_degree, NumberType>;
     SystemMatrixType system_matrix;
 
-    // --- Physics Functions ---
+    // Physics Functions
     std::shared_ptr<const dealii::Function<dim, NumberType>> mu_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> beta_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> gamma_function;
 
-    // --- RHS Functions ---
+    // RHS Functions
     std::shared_ptr<const dealii::Function<dim, NumberType>> forcing_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_function;
     std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_function;
     
-    // --- Boundary IDs ---
+    // Boundary IDs
     std::set<dealii::types::boundary_id> dirichlet_ids;
     std::set<dealii::types::boundary_id> neumann_ids;
 
-    /*
-    MG related members (Placeholder for Multigrid objects)
-    Example:
-    MGConstrainedDoFs mg_constrained_dofs;
-    MGTransferMatrixFree<dim, NumberType> mg_transfer;
-    */
-
-    // --- Vectors ---
+    // Vectors
     dealii::LinearAlgebra::distributed::Vector<NumberType> solution;
     dealii::LinearAlgebra::distributed::Vector<NumberType> system_rhs;
 
     const unsigned int mesh_refinement_level; // Global refinement level for the initial mesh
 
 
-    // --- Utilities ---
+    // Utilities
     NumberType setup_time;
-    dealii::ConditionalOStream pcout;       ///< Stream for parallel output (prints only on rank 0).
-    dealii::ConditionalOStream time_details;///< Stream for timing details.
+    dealii::ConditionalOStream pcout;       // Stream for parallel output (prints only on rank 0).
+    dealii::ConditionalOStream time_details;// Stream for timing details.
 
 };
 

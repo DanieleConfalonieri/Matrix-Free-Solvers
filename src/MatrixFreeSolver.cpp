@@ -277,13 +277,13 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
     try {
       if (is_advection_zero)
       {
-        pcout << "   -> Problema Simmetrico (Beta=0): Utilizzo Solver CG + Jacobi" << std::endl;
+        pcout << "   -> Symmetric problem: Chebyshev preconditioner + CG solver" << std::endl;
         SolverCG<VectorType> solver(solver_control);
         solver.solve(system_matrix, solution, system_rhs, jacobi_preconditioner);
       }
       else
       {
-        pcout << "   -> Problema Asimmetrico (Beta!=0): Utilizzo Solver GMRES + Jacobi" << std::endl;
+        pcout << "   -> Non-symmetric problem (advection): weighted Jacobi preconditioner + GMRES solver" << std::endl;
         SolverGMRES<VectorType> solver(solver_control);
         solver.solve(system_matrix, solution, system_rhs, jacobi_preconditioner);
       }
