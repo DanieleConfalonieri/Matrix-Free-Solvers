@@ -36,6 +36,8 @@ int main (int argc, char *argv[])
 
         const unsigned int dimension = 3;
         const unsigned int degree_finite_element = 2;
+        
+        const unsigned int mesh_refinement_level = (argc > 1) ? std::stoi(argv[1]) : 4; // Adjust from command line for finer/coarser mesh
 
         // Define Advection vector (currently zero for pure diffusion test)
         std::vector<double> beta_vector(dimension, 0.0); 
@@ -52,7 +54,8 @@ int main (int argc, char *argv[])
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0),  // neumann value (unused)
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0),  // dirichlet value
                             std::set<types::boundary_id>{0,1,2,3,4,5}, // Apply Dirichlet to all boundaries
-                            std::set<types::boundary_id>{}  // No Neumann boundaries
+                            std::set<types::boundary_id>{},  // No Neumann boundaries
+                            mesh_refinement_level 
                         );
 
         matrix_free_solver.run();
