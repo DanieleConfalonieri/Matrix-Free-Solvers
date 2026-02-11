@@ -353,7 +353,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
 
     // Set flags for efficient I/O
     DataOutBase::VtkFlags vtk_flags;
-    vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
+    //vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed; commented out to avoid version issues
     data_out.set_flags(vtk_flags);
     
     data_out.write_vtu_with_pvtu_record(
