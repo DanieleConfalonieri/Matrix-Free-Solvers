@@ -249,9 +249,60 @@ void DiffusionReactionParallel::solve()
   preconditioner.initialize(
       system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
 
+  // Analysis of advection Term (Beta)
+  bool is_advection_zero = true;
+  for (unsigned int d = 0; d < dim; ++d)
+  {
+    if (std::abs(b(Point<dim>())[d]) > 1e-12)
+    {
+      is_advection_zero = false;
+      break;
+    }
+  }
+
   ReductionControl solver_control(/* maxiter = */ 10000,
                                   /* tolerance = */ 1.0e-16,
                                   /* reduce = */ 1.0e-6);
+
+  try
+  {
+    if (is_advection_zero)
+    {
+      pcout << "   -> Symmetric problem: Jacobi preconditioner + CG solver" << std::endl;
+    pcout << "  Solving the linear system" << std::endl;
+
+    // CORREZIONE: Usa il tipo di vettore corretto (Trilinos)
+    using VectorType = dealii::TrilinosWrappers::MPI::Vector;
+    
+    SolverCG<VectorType> solver(solver_control);
+
+    // Crea il precondizionatore Trilinos (senza template <...>)
+    TrilinosWrappers::PreconditionJacobi Jacobi_preconditioner;
+    Jacobi_preconditioner.initialize(system_matrix);
+
+    // Ora i tipi coincidono e funzionerà
+    solver.solve(system_matrix, solution, system_rhs, Jacobi_preconditioner);
+
+    pcout << "  " << solver_control.last_step() << " CG iterations" << std::endl;
+    }
+    else
+    {
+      pcout << "   -> Non-symmetric problem (advection): weighted Jacobi preconditioner + GMRES solver" << std::endl;
+      SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
+
+      pcout << "  Solving the linear system" << std::endl;
+
+      solver.solve(system_matrix, solution, system_rhs, preconditioner);
+      pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
+    }
+  }
+  catch (const ReductionControl::NoConvergence &e)
+  {
+    pcout << "Solver did not converge within "
+          << solver_control.last_step()
+          << std::endl;
+    throw;
+  }
 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
 
