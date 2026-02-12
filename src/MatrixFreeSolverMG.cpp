@@ -415,13 +415,14 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
 }
 
 template <int dim, int fe_degree, std::floating_point NumberType>
-void MatrixFreeSolverMG<dim, fe_degree, NumberType>::run()
+void MatrixFreeSolverMG<dim, fe_degree, NumberType>::run(const bool profiling_run)
 {
   pcout << "Running MatrixFreeSolverMG..." << std::endl;
   setup_system();
   assemble_rhs();
   solve();
-  output_results(0);
+  if (!profiling_run)
+    output_results(0);
 }
 
 // Explicit template instantiations

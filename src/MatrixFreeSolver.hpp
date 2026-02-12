@@ -88,7 +88,7 @@ public:
      * @brief Executes the simulation workflow.
      * Calls setup, assembly, solve, and output methods in sequence.
      */
-    void run();
+    void run(const bool profiling_run = false);
 
 private:
     /**

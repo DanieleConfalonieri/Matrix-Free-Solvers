@@ -277,13 +277,13 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
     try {
       if (is_advection_zero)
       {
-        pcout << "   -> Symmetric problem: Chebyshev preconditioner + CG solver" << std::endl;
+        pcout << "   -> Symmetric problem: Jacobi preconditioner + CG solver" << std::endl;
         SolverCG<VectorType> solver(solver_control);
         solver.solve(system_matrix, solution, system_rhs, jacobi_preconditioner);
       }
       else
       {
-        pcout << "   -> Non-symmetric problem (advection): weighted Jacobi preconditioner + GMRES solver" << std::endl;
+        pcout << "   -> Non-symmetric problem (advection): Jacobi preconditioner + GMRES solver" << std::endl;
         SolverGMRES<VectorType> solver(solver_control);
         solver.solve(system_matrix, solution, system_rhs, jacobi_preconditioner);
       }
@@ -348,13 +348,14 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
  * @brief High-level function to run the simulation.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
-void MatrixFreeSolver<dim, fe_degree, NumberType>::run()
+void MatrixFreeSolver<dim, fe_degree, NumberType>::run(const bool profiling_run)
 {
   pcout << "Running MatrixFreeSolver..." << std::endl;
   setup_system();
   assemble_rhs();
   solve();
-  output_results(0);
+  if(!profiling_run)
+    output_results(0);
 }
 
 // Explicit template instantiations

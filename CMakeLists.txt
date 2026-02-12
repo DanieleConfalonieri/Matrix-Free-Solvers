@@ -22,11 +22,11 @@ deal_ii_setup_target(adr_solver)
 
 
 #Testing operator
-add_executable(operator_test
-    src/example1_matrix_free.cpp # Il main di test che avevamo fatto prima
-    src/ADROperator.cpp          # L'operatore serve anche qui!
-    
-    src/ADROperator.hpp
-)
+#add_executable(operator_test
+#    src/example1_matrix_free.cpp # Il main di test che avevamo fatto prima
+#    src/ADROperator.cpp          # L'operatore serve anche qui!
+#    
+#    src/ADROperator.hpp
+#)
 
-deal_ii_setup_target(operator_test)
+#deal_ii_setup_target(operator_test)

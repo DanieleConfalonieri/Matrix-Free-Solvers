@@ -23,9 +23,11 @@ int main (int argc, char *argv[])
 
         const unsigned int dimension = 3;
         const unsigned int degree_finite_element = 2;
-        const bool enableMultigrid = true; // Set to false to disable multigrid preconditioning
+        const bool enableMultigrid = false; // Set to false to disable multigrid preconditioning
 
         const unsigned int mesh_refinement_level = (argc > 1) ? std::stoi(argv[1]) : 4; // Adjust from command line for finer/coarser mesh
+
+        const bool profiling_run = (argc > 2) ? (std::stoi(argv[2]) == 1) : false; // Set to true to disable output file (.vtk) generation for profiling runs
 
         // Advection vector (example: non-zero x component)
         std::vector<double> beta_vector(dimension, 0.0);
@@ -45,7 +47,7 @@ int main (int argc, char *argv[])
                             std::set<types::boundary_id>{0,1,2,3,4,5}, // Apply Dirichlet to all boundaries
                             std::set<types::boundary_id>{}  // Apply Neumann to all boundaries
                         );
-          matrix_free_solver_mg.run();
+          matrix_free_solver_mg.run(profiling_run);
         } else {
           MatrixFreeSolver<dimension,
                         degree_finite_element,
@@ -57,9 +59,10 @@ int main (int argc, char *argv[])
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0),  // Neumann value
                             std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0),  // Dirichlet value
                             std::set<types::boundary_id>{0,1,2,3,4,5}, // Apply Dirichlet to all boundaries
-                            std::set<types::boundary_id>{}  // Apply Neumann to all boundaries
+                            std::set<types::boundary_id>{},  // Apply Neumann to all boundaries
+                            mesh_refinement_level // Global refinement level for the initial mesh
                         );
-          matrix_free_solver.run();
+          matrix_free_solver.run(profiling_run);
         }
     }
   catch (std::exception &exc)

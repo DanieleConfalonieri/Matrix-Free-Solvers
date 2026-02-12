@@ -88,7 +88,7 @@ public:
     /**
      * @brief Run the end-to-end simulation: setup, assemble, solve, output.
      */
-    void run();
+    void run(const bool profiling_run = false);
 
 private:
     /**
