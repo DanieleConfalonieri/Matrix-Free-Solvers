@@ -308,11 +308,10 @@ void DiffusionReactionParallel::solve()
 
   // 3. Stesse Metriche di Performance del Matrix-Free
   const double elapsed_wall_time = timer.wall_time();
-  const double time_per_iter = (n_iter > 0) ? (elapsed_wall_time / n_iter) : 0.0;
+  const double time_per_iter = elapsed_wall_time / n_iter;
   
   // Calcoliamo il throughput in MDoFs/s, tenendo conto del numero totale di DoFs e del tempo per iterazione
-  const double throughput_mdofs = 
-                                  dof_handler.n_dofs() / time_per_iter / 1e6;// MDoFs/s
+  const double throughput_mdofs = dof_handler.n_dofs() / time_per_iter / 1e6;// MDoFs/s
 
   pcout << "   Solved in " << n_iter << " iterations." << std::endl;
   pcout << "   Time per iter:      " << time_per_iter << " s" << std::endl;
