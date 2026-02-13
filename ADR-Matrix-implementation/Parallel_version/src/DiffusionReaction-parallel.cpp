@@ -289,11 +289,12 @@ void DiffusionReactionParallel::solve()
   }
 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
-
+/*
   pcout << "  Solving the linear system" << std::endl;
 
   solver.solve(system_matrix, solution, system_rhs, preconditioner);
   pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
+  */
 }
 
 void DiffusionReactionParallel::output() const
