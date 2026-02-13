@@ -24,11 +24,13 @@
 #include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/vector.h>
 
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
+#include <deal.II/base/timer.h>
 
 #include <filesystem>
 #include <fstream>
@@ -70,7 +72,8 @@ public:
                     const std::function<Tensor<1, dim>(const Point<dim> &)> &b_,
                     const std::function<double(const Point<dim> &)> &sigma_,
                     const std::function<double(const Point<dim> &)> &f_,
-                    const std::function<double(const Point<dim> &)> &phi_)
+                    const std::function<double(const Point<dim> &)> &phi_,
+                    const bool enable_multigrid_ = false)
     : mesh_refinement_level(mesh_refinement_level_)
     , r(r_)
     , mu(mu_)
@@ -78,6 +81,7 @@ public:
     , sigma(sigma_)
     , f(f_)
     , phi(phi_)
+    , enable_multigrid(enable_multigrid_) // Abilitiamo il multigrid per default
     , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , mesh(MPI_COMM_WORLD)
@@ -138,6 +142,9 @@ protected:
 
   // Phi term.
   std::function<double(const Point<dim> &)> phi;
+
+  // Enable multigrid preconditioning (default: false).
+  const bool enable_multigrid;
 
   // Number of MPI processes.
   const unsigned int mpi_size;

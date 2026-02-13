@@ -237,10 +237,6 @@ void DiffusionReactionParallel::solve()
   unsigned int n_iter = 0;
 
   {
-    // Precondizionatore Jacobi 
-    TrilinosWrappers::PreconditionJacobi preconditioner;
-    preconditioner.initialize(system_matrix);
-
     // Analysis of advection Term (Beta)
     bool is_advection_zero = true;
     for (unsigned int d = 0; d < dim; ++d)
@@ -252,24 +248,52 @@ void DiffusionReactionParallel::solve()
       }
     }
 
-    // Tolleranza uniformata
+    // Tolleranza identica al Matrix-Free
     SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
-
     using VectorType = dealii::TrilinosWrappers::MPI::Vector;
 
     try
     {
-      if (is_advection_zero)
+      if (enable_multigrid)
       {
-        pcout << "   -> Symmetric problem: Jacobi preconditioner + CG solver" << std::endl;
-        SolverCG<VectorType> solver(solver_control);
-        solver.solve(system_matrix, solution, system_rhs, preconditioner);
+        // SETUP AMG 
+        TrilinosWrappers::PreconditionAMG preconditioner;
+        TrilinosWrappers::PreconditionAMG::AdditionalData amg_data;
+        amg_data.elliptic = is_advection_zero;
+        
+        // Initialize the AMG preconditioner with the system matrix and the additional data
+        preconditioner.initialize(system_matrix, amg_data);
+
+        if (is_advection_zero)
+        {
+          pcout << "   -> Symmetric problem: AMG preconditioner + CG solver" << std::endl;
+          SolverCG<VectorType> solver(solver_control);
+          solver.solve(system_matrix, solution, system_rhs, preconditioner);
+        }
+        else
+        {
+          pcout << "   -> Non-symmetric problem (advection): AMG preconditioner + GMRES solver" << std::endl;
+          SolverGMRES<VectorType> solver(solver_control);
+          solver.solve(system_matrix, solution, system_rhs, preconditioner);
+        }
       }
       else
       {
-        pcout << "   -> Non-symmetric problem (advection): Jacobi preconditioner + GMRES solver" << std::endl;
-        SolverGMRES<VectorType> solver(solver_control);
-        solver.solve(system_matrix, solution, system_rhs, preconditioner);
+        TrilinosWrappers::PreconditionJacobi preconditioner;
+        preconditioner.initialize(system_matrix);
+
+        if (is_advection_zero)
+        {
+          pcout << "   -> Symmetric problem: Jacobi preconditioner + CG solver" << std::endl;
+          SolverCG<VectorType> solver(solver_control);
+          solver.solve(system_matrix, solution, system_rhs, preconditioner);
+        }
+        else
+        {
+          pcout << "   -> Non-symmetric problem (advection): Jacobi preconditioner + GMRES solver" << std::endl;
+          SolverGMRES<VectorType> solver(solver_control);
+          solver.solve(system_matrix, solution, system_rhs, preconditioner);
+        }
       }
     }
     catch (const SolverControl::NoConvergence &e)
@@ -279,9 +303,8 @@ void DiffusionReactionParallel::solve()
       throw;
     }
 
-    // Salviamo le iterazioni prima di uscire dallo scope
     n_iter = solver_control.last_step();
-  } 
+  }
 
   // 3. Stesse Metriche di Performance del Matrix-Free
   const double elapsed_wall_time = timer.wall_time();

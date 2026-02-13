@@ -14,6 +14,7 @@ main(int argc, char *argv[])
   //const std::string  mesh_filename = "../mesh/mesh-square-h0.100000.msh";
   const unsigned int mesh_refinement_level = 4; // MODIFICA: Sostituito il nome del file con un livello di raffinamento globale
   const unsigned int degree        = 2;
+  const bool enable_multigrid = true; 
 
 
   const auto mu = [](const Point<dim> &/*p*/) { return 1.0;};
@@ -22,7 +23,7 @@ main(int argc, char *argv[])
   const auto sigma = [](const Point<dim> & /*p*/) { return 1.0; };
   const auto phi   = [](const Point<dim> &/*p*/) { return 1.0; };
   
-  DiffusionReactionParallel problem(mesh_refinement_level, degree, mu, b, sigma, f, phi);
+  DiffusionReactionParallel problem(mesh_refinement_level, degree, mu, b, sigma, f, phi, enable_multigrid);
 
   std::set<types::boundary_id> neumann = {1, 3};
   problem.set_neumann_ids(neumann);
