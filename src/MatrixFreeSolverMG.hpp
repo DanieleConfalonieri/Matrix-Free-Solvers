@@ -73,6 +73,7 @@ public:
      * @param dirichlet_func Dirichlet boundary value function (shared pointer).
      * @param dirichlet_b_ids Set of boundary IDs to apply Dirichlet conditions.
      * @param neumann_b_ids Set of boundary IDs to apply Neumann conditions.
+     * @param mesh_refinement_level Global refinement level for the initial mesh.
      */
     MatrixFreeSolverMG(
         std::shared_ptr<const dealii::Function<dim, NumberType>> mu_func,
@@ -82,7 +83,8 @@ public:
         std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func,
         std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_func,
         const std::set<dealii::types::boundary_id> &dirichlet_b_ids,
-        const std::set<dealii::types::boundary_id> &neumann_b_ids
+        const std::set<dealii::types::boundary_id> &neumann_b_ids,
+        const unsigned int mesh_refinement_level = 4
     );
 
     /**
@@ -166,6 +168,9 @@ private:
     /// Conditional output streams (print only on the master MPI rank).
     dealii::ConditionalOStream pcout;
     dealii::ConditionalOStream time_details;
+
+    /// Mesh refinement to determine the degree of coarseness
+    const unsigned int mesh_refinement_level;
 };
 
 #endif

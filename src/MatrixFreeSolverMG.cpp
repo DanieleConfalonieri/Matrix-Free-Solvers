@@ -16,7 +16,8 @@ MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
       std::shared_ptr<const dealii::Function<dim, NumberType>> neumann_func,
       std::shared_ptr<const dealii::Function<dim, NumberType>> dirichlet_func,
       const std::set<dealii::types::boundary_id> &dirichlet_b_ids,
-      const std::set<dealii::types::boundary_id> &neumann_b_ids
+      const std::set<dealii::types::boundary_id> &neumann_b_ids,
+      const unsigned int mesh_refinement_level
 )
 #ifdef DEAL_II_WITH_P4EST
   : triangulation(MPI_COMM_WORLD, 
@@ -35,6 +36,7 @@ MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
   , dirichlet_function(dirichlet_func)
   , dirichlet_ids(dirichlet_b_ids)
   , neumann_ids(neumann_b_ids)
+  , mesh_refinement_level(mesh_refinement_level)
   , setup_time(0.0)
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
@@ -51,7 +53,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
   {
     // 1. Grid Generation
     GridGenerator::hyper_cube(triangulation, 0.0, 1.0, true);
-    triangulation.refine_global(4); 
+    triangulation.refine_global(mesh_refinement_level); 
 
     system_matrix.clear();
     mg_matrices.clear_elements(); // Added for MG
