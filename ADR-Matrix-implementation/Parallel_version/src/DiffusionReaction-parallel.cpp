@@ -8,29 +8,13 @@ void DiffusionReactionParallel::setup()
   {
     pcout << "Initializing the mesh" << std::endl;
 
-    // First, we read the mesh from file into a serial (i.e. not parallel)
-    // triangulation.
-    Triangulation<dim> mesh_serial;
+    // Generiamo direttamente l'ipercubo distribuito, esattamente come nel Matrix-Free
+    GridGenerator::hyper_cube(mesh, 0.0, 1.0, true);
+    
+    // NOTA: Devi passare la variabile mesh_refinement_level a questa funzione
+    // oppure definirla nella classe del tuo amico.
+    mesh.refine_global(mesh_refinement_level);
 
-    {
-      GridIn<dim> grid_in;
-      grid_in.attach_triangulation(mesh_serial);
-
-      std::ifstream mesh_file(mesh_file_name);
-      grid_in.read_msh(mesh_file);
-    }
-
-    // Then, we copy the serial mesh into the parallel one.
-    {
-      GridTools::partition_triangulation(mpi_size, mesh_serial);
-
-      const auto construction_data = TriangulationDescription::Utilities::
-          create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
-      mesh.create_triangulation(construction_data);
-    }
-
-    // Notice that here we write the number of *global* active cells (across all
-    // processes).
     pcout << "  Number of elements = " << mesh.n_global_active_cells()
           << std::endl;
   }
@@ -41,14 +25,14 @@ void DiffusionReactionParallel::setup()
   {
     pcout << "Initializing the finite element space" << std::endl;
 
-    fe = std::make_unique<FE_SimplexP<dim>>(r);
+    fe = std::make_unique<FE_Q<dim>>(r); //MoDIFICA 6: Sostituito FE_SimplexP con FE_Q, che è più adatto per ipercubi
 
     pcout << "  Degree                     = " << fe->degree << std::endl;
     pcout << "  DoFs per cell              = " << fe->dofs_per_cell
           << std::endl;
 
-    quadrature = std::make_unique<QGaussSimplex<dim>>(r + 1);
-    quadrature_boundary = std::make_unique<QGaussSimplex<dim - 1>>(r + 1);
+    quadrature = std::make_unique<QGauss<dim>>(r + 1);
+    quadrature_boundary = std::make_unique<QGauss<dim - 1>>(r + 1);
 
     pcout << "  Quadrature points per cell = " << quadrature->size()
           << std::endl;
@@ -315,31 +299,26 @@ void DiffusionReactionParallel::solve()
 void DiffusionReactionParallel::output() const
 {
   pcout << "===============================================" << std::endl;
+  pcout << "Outputting results..." << std::endl;
 
+  // 1. Estrazione dei DoF "fantasma" (locally relevant)
   const IndexSet locally_relevant_dofs =
       DoFTools::extract_locally_relevant_dofs(dof_handler);
 
-  // To correctly export the solution, each process needs to know the solution
-  // DoFs it owns, and the ones corresponding to elements adjacent to the ones
-  // it owns (the locally relevant DoFs, or ghosts). We create a vector to store
-  // them.
+  // In Trilinos, i ghost si gestiscono creando un vettore ad hoc
   TrilinosWrappers::MPI::Vector solution_ghost(locally_owned_dofs,
                                                locally_relevant_dofs,
                                                MPI_COMM_WORLD);
 
-  // This assignment performs the necessary communication so that the locally
-  // relevant DoFs are received from other processes and stored inside
-  // solution_ghost.
+  // L'assegnazione fa scattare la comunicazione MPI (scatter)
   solution_ghost = solution;
 
-  // Then we build and fill the DataOut class as usual, using the vector with
-  // ghosts.
+  // 2. Preparazione dell'output (Sintassi moderna uniformata)
   DataOut<dim> data_out;
+  data_out.attach_dof_handler(dof_handler);
+  data_out.add_data_vector(solution_ghost, "solution");
 
-  data_out.add_data_vector(dof_handler, solution_ghost, "solution");
-
-  // We also add a vector to represent the parallel partitioning of the mesh,
-  // for the sake of visualization.
+  // Aggiungiamo il partizionamento MPI per la visualizzazione in Paraview
   std::vector<unsigned int> partition_int(mesh.n_active_cells());
   GridTools::get_subdomain_association(mesh, partition_int);
   const Vector<double> partitioning(partition_int.begin(), partition_int.end());
@@ -347,17 +326,21 @@ void DiffusionReactionParallel::output() const
 
   data_out.build_patches();
 
-  const std::filesystem::path mesh_path(mesh_file_name);
-  const std::string output_file_name = "output-" + mesh_path.stem().string();
+  // 3. Salvataggio su file
+  // Rimosso mesh_file_name: usiamo un nome standard e il livello di raffinamento
+  const std::string output_file_name = "solution_matrix_based";
 
-  // Finally, we need to write in a format that supports parallel output. This
-  // can be achieved in multiple ways (e.g. XDMF/H5). We choose VTU/PVTU files.
-  data_out.write_vtu_with_pvtu_record(/* folder = */ "./",
-                                      /* basename = */ output_file_name,
-                                      /* index = */ 0,
-                                      MPI_COMM_WORLD);
+  data_out.write_vtu_with_pvtu_record(
+    "./",
+    output_file_name,
+    mesh_refinement_level, // Usiamo il livello di raffinamento come ciclo/indice
+    MPI_COMM_WORLD,
+    2 // Numero di cifre nel nome file (es. solution_matrix_based_03.vtu)
+  );
 
-  pcout << "Output written to " << output_file_name << std::endl;
+  pcout << "Output written to " << output_file_name << "_" 
+        << std::setfill('0') << std::setw(2) << mesh_refinement_level 
+        << ".pvtu" << std::endl;
 
   pcout << "===============================================" << std::endl;
 }
@@ -367,12 +350,14 @@ DiffusionReactionParallel::compute_error(
     const VectorTools::NormType &norm_type,
     const Function<dim> &exact_solution) const
 {
-  const QGaussSimplex<dim> quadrature_error(r + 2);
+  // Usiamo la quadratura di Gauss standard (non Simplex)
+  const QGauss<dim> quadrature_error(r + 2);
 
-  FE_SimplexP<dim> fe_linear(1);
-  MappingFE mapping(fe_linear);
+  // Usiamo la mappatura nativa per elementi tensoriali 
+  MappingQ<dim> mapping(1);
 
   Vector<double> error_per_cell(mesh.n_active_cells());
+  
   VectorTools::integrate_difference(mapping,
                                     dof_handler,
                                     solution,

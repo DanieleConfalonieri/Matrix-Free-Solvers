@@ -4,17 +4,19 @@
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/quadrature_lib.h>
 
-#include <deal.II/distributed/fully_distributed_tria.h>
+// MODIFICA 1: Sostituito fully_distributed_tria con la standard distributed tria
+// (necessaria per usare GridGenerator::hyper_cube in parallelo)
+#include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_tools.h>
 
-#include <deal.II/fe/fe_simplex_p.h>
+// MODIFICA 2: Inclusi gli elementi tensoriali (FE_Q) invece dei simpliciali
+#include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/mapping_fe.h>
 
 #include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/grid_in.h>
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria.h>
 
@@ -60,14 +62,15 @@ public:
   };
 
   // Constructor.
-  DiffusionReactionParallel(const std::string &mesh_file_name_,
+  // MODIFICA 3: Sostituita la stringa del file con il livello di raffinamento
+  DiffusionReactionParallel(const unsigned int mesh_refinement_level_,
                     const unsigned int &r_,
                     const std::function<double(const Point<dim> &)> &mu_,
                     const std::function<Tensor<1, dim>(const Point<dim> &)> &b_,
                     const std::function<double(const Point<dim> &)> &sigma_,
                     const std::function<double(const Point<dim> &)> &f_,
                     const std::function<double(const Point<dim> &)> &phi_)
-    : mesh_file_name(mesh_file_name_)
+    : mesh_refinement_level(mesh_refinement_level_)
     , r(r_)
     , mu(mu_)
     , b(b_)
@@ -102,8 +105,8 @@ public:
                 const Function<dim>         &exact_solution) const;
 
 protected:
-  // Name of the mesh.
-  const std::string mesh_file_name;
+  // MODIFICA 4: Rimosso mesh_file_name, inserito mesh_refinement_level
+  const unsigned int mesh_refinement_level;
 
   // Polynomial degree.
   const unsigned int r;
@@ -129,10 +132,8 @@ protected:
   // Rank of the current MPI process.
   const unsigned int mpi_rank;
 
-  // Triangulation. The parallel::fullydistributed::Triangulation class manages
-  // a mesh that is completely distributed across all MPI processes (i.e. each
-  // process only stores its own locally relevant cells).
-  parallel::fullydistributed::Triangulation<dim> mesh;
+  // MODIFICA 5: Passaggio a parallel::distributed::Triangulation standard
+  parallel::distributed::Triangulation<dim> mesh;
 
   // Finite element space.
   std::unique_ptr<FiniteElement<dim>> fe;
