@@ -33,6 +33,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 
 using namespace dealii;
 
@@ -86,6 +87,12 @@ public:
   // Initialization.
   void
   setup();
+
+  // Set Neumann boundary ids.
+  void set_neumann_ids(const std::set<types::boundary_id> &ids)
+  {
+    neumann_ids = ids;
+  }
 
   // System assembly.
   void
@@ -161,6 +168,9 @@ protected:
 
   // Locally owned DoFs for current process.
   IndexSet locally_owned_dofs;
+
+  // Neumann boundary ids to be set by the caller.
+  std::set<types::boundary_id> neumann_ids;
 };
 
 #endif

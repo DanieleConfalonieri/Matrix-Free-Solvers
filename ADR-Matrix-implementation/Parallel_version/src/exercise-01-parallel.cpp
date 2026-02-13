@@ -24,6 +24,9 @@ main(int argc, char *argv[])
   
   DiffusionReactionParallel problem(mesh_refinement_level, degree, mu, b, sigma, f, phi);
 
+  std::set<types::boundary_id> neumann = {1, 3};
+  problem.set_neumann_ids(neumann);
+
   problem.setup();
   problem.assemble();
   problem.solve();

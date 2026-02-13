@@ -104,11 +104,13 @@ void DiffusionReactionParallel::assemble()
   // Since we need to compute integrals on the boundary for Neumann conditions,
   // we also need a FEValues object to compute quantities on boundary edges
   // (faces).
-  FEFaceValues<dim> fe_values_boundary(*fe,
-                                       *quadrature_boundary,
-                                       update_values | update_gradients |
-                                           update_quadrature_points |
-                                           update_JxW_values);
+  FEFaceValues<dim> fe_face_values(*fe,
+                                   *quadrature_boundary,
+                                   update_values | update_gradients |
+                                       update_quadrature_points |
+                                       update_JxW_values);
+
+  // `neumann_ids` is configured by the caller via `set_neumann_ids(...)`.
 
   // Local matrix and vector.
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -168,26 +170,23 @@ void DiffusionReactionParallel::assemble()
     {
       // ...we loop over its edges (referred to as faces in the deal.II
       // jargon).
-      for (unsigned int face_number = 0; face_number < cell->n_faces();
-           ++face_number)
+      for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
       {
-        // If current face lies on the boundary, and its boundary ID (or
-        // tag) is that of one of the Neumann boundaries, we assemble the
-        // boundary integral.
-        if (cell->face(face_number)->at_boundary() &&
-            (cell->face(face_number)->boundary_id() == 1 ||
-             cell->face(face_number)->boundary_id() == 3))
+        // If current face lies on the boundary and its boundary_id is in
+        // the set of Neumann boundaries, assemble the boundary integral.
+        auto face = cell->face(face_no);
+        if (face->at_boundary() && neumann_ids.count(face->boundary_id()))
         {
-          fe_values_boundary.reinit(cell, face_number);
+          fe_face_values.reinit(cell, face_no);
 
           for (unsigned int q = 0; q < quadrature_boundary->size(); ++q)
           {
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
               cell_rhs(i) +=
-                  phi(fe_values_boundary.quadrature_point(q)) * //
-                  fe_values_boundary.shape_value(i, q) *        //
-                  fe_values_boundary.JxW(q);
+                  phi(fe_face_values.quadrature_point(q)) * //
+                  fe_face_values.shape_value(i, q) *        //
+                  fe_face_values.JxW(q);
             }
           }
         }
