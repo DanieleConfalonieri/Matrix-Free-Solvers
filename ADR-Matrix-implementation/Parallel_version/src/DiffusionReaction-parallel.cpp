@@ -156,9 +156,9 @@ void DiffusionReactionParallel::assemble()
                                fe_values.shape_value(i, q) * //
                                fe_values.shape_value(j, q) * //
                                fe_values.JxW(q);
-          cell_matrix(i, j) += -(b_loc * fe_values.shape_grad(i, q)) * // b * grad(v)
-                               fe_values.shape_value(j, q) *           // u
-                               fe_values.JxW(q);
+          cell_matrix(i, j) += (b_loc * fe_values.shape_grad(j, q)) * // b * grad(u)
+                                fe_values.shape_value(i, q) * // v
+                                fe_values.JxW(q);
         }
 
         cell_rhs(i) += f_loc *                       //
@@ -213,7 +213,9 @@ void DiffusionReactionParallel::assemble()
 
     std::map<types::boundary_id, const Function<dim> *> boundary_functions;
     boundary_functions[0] = &bc_function;
+    boundary_functions[1] = &bc_function;
     boundary_functions[2] = &bc_function;
+    boundary_functions[3] = &bc_function;
 
     VectorTools::interpolate_boundary_values(dof_handler,
                                              boundary_functions,
@@ -227,73 +229,70 @@ void DiffusionReactionParallel::assemble()
 void DiffusionReactionParallel::solve()
 {
   pcout << "===============================================" << std::endl;
+  pcout << "Solving linear system..." << std::endl;
 
-  TrilinosWrappers::PreconditionSSOR preconditioner;
-  preconditioner.initialize(
-      system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
+  Timer time; 
+  unsigned int n_iter = 0;
 
-  // Analysis of advection Term (Beta)
-  bool is_advection_zero = true;
-  for (unsigned int d = 0; d < dim; ++d)
   {
-    if (std::abs(b(Point<dim>())[d]) > 1e-12)
+    // Precondizionatore Jacobi 
+    TrilinosWrappers::PreconditionJacobi preconditioner;
+    preconditioner.initialize(system_matrix);
+
+    // Analysis of advection Term (Beta)
+    bool is_advection_zero = true;
+    for (unsigned int d = 0; d < dim; ++d)
     {
-      is_advection_zero = false;
-      break;
+      if (std::abs(b(Point<dim>())[d]) > 1e-12)
+      {
+        is_advection_zero = false;
+        break;
+      }
     }
-  }
 
-  ReductionControl solver_control(/* maxiter = */ 10000,
-                                  /* tolerance = */ 1.0e-16,
-                                  /* reduce = */ 1.0e-6);
+    // Tolleranza uniformata
+    SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
 
-  try
-  {
-    if (is_advection_zero)
-    {
-      pcout << "   -> Symmetric problem: Jacobi preconditioner + CG solver" << std::endl;
-    pcout << "  Solving the linear system" << std::endl;
-
-    // CORREZIONE: Usa il tipo di vettore corretto (Trilinos)
     using VectorType = dealii::TrilinosWrappers::MPI::Vector;
-    
-    SolverCG<VectorType> solver(solver_control);
 
-    // Crea il precondizionatore Trilinos (senza template <...>)
-    TrilinosWrappers::PreconditionJacobi Jacobi_preconditioner;
-    Jacobi_preconditioner.initialize(system_matrix);
-
-    // Ora i tipi coincidono e funzionerà
-    solver.solve(system_matrix, solution, system_rhs, Jacobi_preconditioner);
-
-    pcout << "  " << solver_control.last_step() << " CG iterations" << std::endl;
-    }
-    else
+    try
     {
-      pcout << "   -> Non-symmetric problem (advection): weighted Jacobi preconditioner + GMRES solver" << std::endl;
-      SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
-
-      pcout << "  Solving the linear system" << std::endl;
-
-      solver.solve(system_matrix, solution, system_rhs, preconditioner);
-      pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
+      if (is_advection_zero)
+      {
+        pcout << "   -> Symmetric problem: Jacobi preconditioner + CG solver" << std::endl;
+        SolverCG<VectorType> solver(solver_control);
+        solver.solve(system_matrix, solution, system_rhs, preconditioner);
+      }
+      else
+      {
+        pcout << "   -> Non-symmetric problem (advection): Jacobi preconditioner + GMRES solver" << std::endl;
+        SolverGMRES<VectorType> solver(solver_control);
+        solver.solve(system_matrix, solution, system_rhs, preconditioner);
+      }
     }
-  }
-  catch (const ReductionControl::NoConvergence &e)
-  {
-    pcout << "Solver did not converge within "
-          << solver_control.last_step()
-          << std::endl;
-    throw;
-  }
+    catch (const SolverControl::NoConvergence &e)
+    {
+      pcout << "Solver did not converge within "
+            << solver_control.last_step() << std::endl;
+      throw;
+    }
 
-  SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
-/*
-  pcout << "  Solving the linear system" << std::endl;
+    // Salviamo le iterazioni prima di uscire dallo scope
+    n_iter = solver_control.last_step();
+  } 
 
-  solver.solve(system_matrix, solution, system_rhs, preconditioner);
-  pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
-  */
+  // 3. Stesse Metriche di Performance del Matrix-Free
+  const double elapsed_wall_time = time.wall_time();
+  const double time_per_iter = (n_iter > 0) ? (elapsed_wall_time / n_iter) : 0.0;
+  
+  // Calcoliamo il throughput in MDoFs/s, tenendo conto del numero totale di DoFs e del tempo per iterazione
+  const double throughput_mdofs = (time_per_iter > 1e-12) ? 
+                                  (dof_handler.n_dofs() / time_per_iter / 1e6) : 0.0;
+
+  pcout << "   Solved in " << n_iter << " iterations." << std::endl;
+  pcout << "   Time per iter:      " << time_per_iter << " s" << std::endl;
+  pcout << "   Throughput:         " << throughput_mdofs << " MDoFs/s" << std::endl;
+  pcout << "===============================================" << std::endl;
 }
 
 void DiffusionReactionParallel::output() const
