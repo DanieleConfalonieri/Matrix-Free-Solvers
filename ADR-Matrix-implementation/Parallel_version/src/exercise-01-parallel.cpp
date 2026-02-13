@@ -11,7 +11,8 @@ main(int argc, char *argv[])
   // dealii (e.g. p4est, PETSc, ...).
   Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
 
-  const std::string  mesh_filename = "../mesh/mesh-square-h0.100000.msh";
+  //const std::string  mesh_filename = "../mesh/mesh-square-h0.100000.msh";
+  const unsigned int mesh_refinement_level = 4; // MODIFICA: Sostituito il nome del file con un livello di raffinamento globale
   const unsigned int degree        = 2;
 
 
@@ -21,7 +22,7 @@ main(int argc, char *argv[])
   const auto sigma = [](const Point<dim> & /*p*/) { return 1.0; };
   const auto phi   = [](const Point<dim> &/*p*/) { return 1.0; };
   
-  DiffusionReactionParallel problem(mesh_filename, degree, mu, b, sigma, f, phi);
+  DiffusionReactionParallel problem(mesh_refinement_level, degree, mu, b, sigma, f, phi);
 
   problem.setup();
   problem.assemble();
