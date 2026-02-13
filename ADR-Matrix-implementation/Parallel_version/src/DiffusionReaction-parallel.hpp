@@ -94,6 +94,12 @@ public:
     neumann_ids = ids;
   }
 
+  // Set Dirichlet boundary ids.
+  void set_dirichlet_ids(const std::set<types::boundary_id> &ids)
+  {
+    dirichlet_ids = ids;
+  }
+
   // System assembly.
   void
   assemble();
@@ -171,6 +177,8 @@ protected:
 
   // Neumann boundary ids to be set by the caller.
   std::set<types::boundary_id> neumann_ids;
+  // Dirichlet boundary ids to be set by the caller.
+  std::set<types::boundary_id> dirichlet_ids;
 };
 
 #endif

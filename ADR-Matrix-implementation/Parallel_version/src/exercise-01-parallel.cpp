@@ -27,6 +27,10 @@ main(int argc, char *argv[])
   std::set<types::boundary_id> neumann = {1, 3};
   problem.set_neumann_ids(neumann);
 
+  // Specify Dirichlet boundary ids (for example: left and right boundaries)
+  std::set<types::boundary_id> dirichlet = {0, 2};
+  problem.set_dirichlet_ids(dirichlet);
+
   problem.setup();
   problem.assemble();
   problem.solve();

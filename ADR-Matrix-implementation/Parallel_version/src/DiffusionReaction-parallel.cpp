@@ -1,4 +1,5 @@
 #include "DiffusionReaction-parallel.hpp"
+#include <deal.II/base/timer.h>
 
 void DiffusionReactionParallel::setup()
 {
@@ -211,18 +212,19 @@ void DiffusionReactionParallel::assemble()
     std::map<types::global_dof_index, double> boundary_values;
     FunctionG bc_function;
 
-    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-    boundary_functions[0] = &bc_function;
-    boundary_functions[1] = &bc_function;
-    boundary_functions[2] = &bc_function;
-    boundary_functions[3] = &bc_function;
+    if (!dirichlet_ids.empty())
+    {
+      std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+      for (const auto &id : dirichlet_ids)
+        boundary_functions[id] = &bc_function;
 
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values);
+      VectorTools::interpolate_boundary_values(dof_handler,
+                                               boundary_functions,
+                                               boundary_values);
 
-    MatrixTools::apply_boundary_values(
-        boundary_values, system_matrix, solution, system_rhs, true);
+      MatrixTools::apply_boundary_values(
+          boundary_values, system_matrix, solution, system_rhs, true);
+    }
   }
 }
 
@@ -231,7 +233,7 @@ void DiffusionReactionParallel::solve()
   pcout << "===============================================" << std::endl;
   pcout << "Solving linear system..." << std::endl;
 
-  Timer time; 
+  dealii::Timer timer;
   unsigned int n_iter = 0;
 
   {
@@ -282,12 +284,12 @@ void DiffusionReactionParallel::solve()
   } 
 
   // 3. Stesse Metriche di Performance del Matrix-Free
-  const double elapsed_wall_time = time.wall_time();
+  const double elapsed_wall_time = timer.wall_time();
   const double time_per_iter = (n_iter > 0) ? (elapsed_wall_time / n_iter) : 0.0;
   
   // Calcoliamo il throughput in MDoFs/s, tenendo conto del numero totale di DoFs e del tempo per iterazione
-  const double throughput_mdofs = (time_per_iter > 1e-12) ? 
-                                  (dof_handler.n_dofs() / time_per_iter / 1e6) : 0.0;
+  const double throughput_mdofs = 
+                                  dof_handler.n_dofs() / time_per_iter / 1e6;// MDoFs/s
 
   pcout << "   Solved in " << n_iter << " iterations." << std::endl;
   pcout << "   Time per iter:      " << time_per_iter << " s" << std::endl;
