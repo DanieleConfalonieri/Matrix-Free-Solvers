@@ -184,10 +184,11 @@ void DiffusionReactionParallel::assemble()
           {
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
-              cell_rhs(i) +=
-                  phi(fe_face_values.quadrature_point(q)) * //
-                  fe_face_values.shape_value(i, q) *        //
-                  fe_face_values.JxW(q);
+              const double mu_loc = mu(fe_face_values.quadrature_point(q)); 
+              cell_rhs(i) +=  mu_loc * // boundary integral: mu * h * v
+                              neumann_func(fe_face_values.quadrature_point(q)) * 
+                              fe_face_values.shape_value(i, q) * 
+                              fe_face_values.JxW(q);
             }
           }
         }

@@ -138,6 +138,13 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
   pcout << "Assembling right hand side..." <<  std::endl;
   {
     system_rhs = 0;
+
+    // Create the vector for the Dirichlet shift (i.e. the contribution of Dirichlet BCs to the RHS)
+    dealii::LinearAlgebra::distributed::Vector<NumberType> u_dirichlet;
+    system_matrix.initialize_dof_vector(u_dirichlet);
+    u_dirichlet = 0.0;
+    constraints.distribute(u_dirichlet);
+    u_dirichlet.update_ghost_values(); 
     
     // Quadrature and FEValues setup
     const QGauss<dim> quadrature_formula(fe_degree + 1);
@@ -146,7 +153,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
     FEValues<dim> fe_values (
       fe,
       quadrature_formula,
-      update_values | update_quadrature_points | update_JxW_values
+      update_values | update_gradients | update_quadrature_points | update_JxW_values
     );
 
     FEFaceValues<dim> fe_face_values (
@@ -168,6 +175,12 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
     std::vector<NumberType> neumann_values (n_face_q_points);
     std::vector<NumberType> mu_boundary_values (n_face_q_points); 
 
+    // Buffers for Dirichlet contributions
+    std::vector<NumberType> mu_values(n_q_points);
+    std::vector<Tensor<1, dim, NumberType>> beta_values(n_q_points);
+    std::vector<NumberType> gamma_values(n_q_points);
+    Vector<NumberType> local_dirichlet(dofs_per_cell);
+
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
         if (cell->is_locally_owned())
@@ -175,18 +188,56 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
           cell_rhs = 0;
           fe_values.reinit(cell);
 
+          // Extract Dirichlet values at DoFs of current cell
+          cell->get_dof_indices(local_dof_indices);
+          bool needs_shift = false;
+          for (unsigned int i=0; i<dofs_per_cell; ++i){
+            local_dirichlet(i) = u_dirichlet(local_dof_indices[i]);
+            if (std::abs(local_dirichlet(i)) > 1e-14)
+              needs_shift = true;
+          }
+
           // Get forcing function values at quadrature points
           forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
+
+          if(needs_shift){
+            mu_function->value_list(fe_values.get_quadrature_points(), mu_values);
+            gamma_function->value_list(fe_values.get_quadrature_points(), gamma_values);
+            
+            // Popoling manually the beta function values at quadrature points (since it's a vector-valued function)
+            for (unsigned int q = 0; q < n_q_points; ++q) {
+              for (unsigned int d = 0; d < dim; ++d) {
+                beta_values[q][d] = beta_function->value(fe_values.quadrature_point(q), d);
+              }
+            }
+          }
 
           // Volume integral: \int f * v
           for (unsigned int q=0; q<n_q_points; ++q)
             {
               const NumberType jxw = fe_values.JxW(q);
+              NumberType u_g = 0;
+              Tensor<1, dim, NumberType> grad_u_g;
+
+              if(needs_shift){
+                for(unsigned int j=0; j<dofs_per_cell; ++j){
+                  u_g += local_dirichlet(j) * fe_values.shape_value(j, q);
+                  for (unsigned int d=0; d<dim; ++d)
+                    grad_u_g[d] += local_dirichlet(j) * fe_values.shape_grad(j, q)[d];
+                }
+              }
               for (unsigned int i=0; i<dofs_per_cell; ++i)
                 {
-                  cell_rhs(i) += fe_values.shape_value(i, q) *
-                                forcing_values[q] *
-                                jxw;
+                  NumberType rhs_val = forcing_values[q] * fe_values.shape_value(i, q); // f* v
+
+                  // Apply the shift
+                  if(needs_shift){
+                    NumberType shift = mu_values[q] * (grad_u_g * fe_values.shape_grad(i, q)) + // mu * grad(u_g) * grad(v)
+                                       (beta_values[q] * grad_u_g) * fe_values.shape_value(i, q) + // beta * grad(u_g) * v
+                                       gamma_values[q] * u_g * fe_values.shape_value(i, q); // gamma * u_g * v 
+                    rhs_val -= shift;
+                  }
+                  cell_rhs(i) += rhs_val * jxw;
                 }
             }
 
@@ -270,7 +321,6 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
         break;
       }
     }
-
     // Solver configuration
     SolverControl solver_control (1000, 1e-12 * system_rhs.l2_norm());
     constraints.set_zero(solution);

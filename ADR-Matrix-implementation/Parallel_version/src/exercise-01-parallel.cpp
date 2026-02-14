@@ -17,20 +17,21 @@ main(int argc, char *argv[])
   const bool enable_multigrid = true; 
 
 
-  const auto mu = [](const Point<dim> &/*p*/) { return 1.0;};
-  const auto b = [](const Point<dim> &/*p*/) { return Tensor<1, dim>({-1.0, -1.0}); };
-  const auto f     = [](const Point<dim>     &/*p*/) { return 0.0; };
-  const auto sigma = [](const Point<dim> & /*p*/) { return 1.0; };
-  const auto phi   = [](const Point<dim> &/*p*/) { return 1.0; };
+  const auto mu = [](const Point<dim> &/*p*/) { return 3.0;};
+  const auto b = [](const Point<dim> &/*p*/) { return Tensor<1, dim>({1.00, -1.0, 1.0}); };
+  const auto f     = [](const Point<dim>     &/*p*/) { return 1.0; };
+  const auto sigma = [](const Point<dim> & /*p*/) { return 2.0; };
+  const auto neumann_func   = [](const Point<dim> &/*p*/) { return 2.0; };
   
-  DiffusionReactionParallel problem(mesh_refinement_level, degree, mu, b, sigma, f, phi, enable_multigrid);
+  DiffusionReactionParallel problem(mesh_refinement_level, degree, mu, b, sigma, f, neumann_func, enable_multigrid);
 
-  std::set<types::boundary_id> neumann = {1, 3};
-  problem.set_neumann_ids(neumann);
-
-  // Specify Dirichlet boundary ids (for example: left and right boundaries)
-  std::set<types::boundary_id> dirichlet = {0, 2};
+  // Specify Dirichlet boundary ids 
+  std::set<types::boundary_id> dirichlet = {1, 2, 3, 4};
   problem.set_dirichlet_ids(dirichlet);
+
+  // Specify Neumann boundary ids 
+  std::set<types::boundary_id> neumann = {0,5};
+  problem.set_neumann_ids(neumann);
 
   problem.setup();
   problem.assemble();

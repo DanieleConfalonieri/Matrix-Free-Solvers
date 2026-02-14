@@ -46,7 +46,7 @@ class DiffusionReactionParallel
 {
 public:
   // Physical dimension (1D, 2D, 3D)
-  static constexpr unsigned int dim = 2;
+  static constexpr unsigned int dim = 3;
   class FunctionG : public Function<dim>
   {
   public:
@@ -60,7 +60,8 @@ public:
     value(const Point<dim> &p,
           const unsigned int /*component*/ = 0) const override
     {
-      return std::sin(3.0 * M_PI * p[0]) + std::sin(2.0 * M_PI * p[1]);
+      return 7.0;
+      //return std::sin(3.0 * M_PI * p[0]) + std::sin(2.0 * M_PI * p[1]);
     }
   };
 
@@ -72,7 +73,7 @@ public:
                     const std::function<Tensor<1, dim>(const Point<dim> &)> &b_,
                     const std::function<double(const Point<dim> &)> &sigma_,
                     const std::function<double(const Point<dim> &)> &f_,
-                    const std::function<double(const Point<dim> &)> &phi_,
+                    const std::function<double(const Point<dim> &)> &neumann_func_,
                     const bool enable_multigrid_ = false)
     : mesh_refinement_level(mesh_refinement_level_)
     , r(r_)
@@ -80,7 +81,7 @@ public:
     , b(b_)
     , sigma(sigma_)
     , f(f_)
-    , phi(phi_)
+    , neumann_func(neumann_func_)
     , enable_multigrid(enable_multigrid_) // Abilitiamo il multigrid per default
     , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
@@ -140,8 +141,8 @@ protected:
   // Forcing term.
   std::function<double(const Point<dim> &)> f;
 
-  // Phi term.
-  std::function<double(const Point<dim> &)> phi;
+  // neumann_func term.
+  std::function<double(const Point<dim> &)> neumann_func;
 
   // Enable multigrid preconditioning (default: false).
   const bool enable_multigrid;
