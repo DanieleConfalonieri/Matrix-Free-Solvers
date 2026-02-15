@@ -1,4 +1,5 @@
 #include "MatrixFreeSolverMG.hpp"
+#include <algorithm>
 
 using namespace dealii;
 
@@ -37,7 +38,7 @@ MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
   , dirichlet_ids(dirichlet_b_ids)
   , neumann_ids(neumann_b_ids)
   , mesh_refinement_level(mesh_refinement_level)
-  , setup_time(0.0)
+  , cumulative_time(0.0)
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
   , time_details(std::cout,
@@ -49,7 +50,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
 {
   Timer time;
   pcout << "Setting up system..." << std::endl;
-  setup_time = 0.0;
+  cumulative_time = 0.0;
   {
     // 1. Grid Generation
     GridGenerator::hyper_cube(triangulation, 0.0, 1.0, true);
@@ -83,7 +84,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
       constraints);
     constraints.close();
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Distribute DoFs & B.C.     (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
   time.restart();
 
@@ -115,7 +116,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
   system_matrix.initialize_dof_vector(solution);
   system_matrix.initialize_dof_vector(system_rhs);
 
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Setup matrix-free system   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
   time.restart();
   
@@ -160,7 +161,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
   }
   // ---------------------------------------------------------
 
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Setup matrix-free levels   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
 }
 
@@ -171,12 +172,20 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::assemble_rhs()
   pcout << "Assembling right hand side..." <<  std::endl;
   {
     system_rhs = 0;
+
+    // Dirichlet shift: contribution of known Dirichlet values to the RHS (same as MatrixFreeSolver)
+    dealii::LinearAlgebra::distributed::Vector<NumberType> u_dirichlet;
+    system_matrix.initialize_dof_vector(u_dirichlet);
+    u_dirichlet = 0.0;
+    constraints.distribute(u_dirichlet);
+    u_dirichlet.update_ghost_values();
+
     const QGauss<dim> quadrature_formula(fe_degree + 1);
     const QGauss<dim-1> face_quadrature_formula(fe_degree + 1);
 
     FEValues<dim> fe_values (
       fe, quadrature_formula,
-      update_values | update_quadrature_points | update_JxW_values
+      update_values | update_gradients | update_quadrature_points | update_JxW_values
     );
 
     FEFaceValues<dim> fe_face_values (
@@ -193,7 +202,13 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::assemble_rhs()
 
     std::vector<NumberType> forcing_values (n_q_points);
     std::vector<NumberType> neumann_values (n_face_q_points);
-    std::vector<NumberType> mu_boundary_values (n_face_q_points); 
+    std::vector<NumberType> mu_boundary_values (n_face_q_points);
+
+    // Buffers for Dirichlet shift (A * u_g)
+    std::vector<NumberType> mu_values(n_q_points);
+    std::vector<Tensor<1, dim, NumberType>> beta_values(n_q_points);
+    std::vector<NumberType> gamma_values(n_q_points);
+    Vector<NumberType> local_dirichlet(dofs_per_cell);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       if (cell->is_locally_owned())
@@ -201,35 +216,77 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::assemble_rhs()
         cell_rhs = 0;
         fe_values.reinit(cell);
 
-        forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
-        for (unsigned int q=0; q<n_q_points; ++q)
+        cell->get_dof_indices(local_dof_indices);
+        bool needs_shift = false;
+        for (unsigned int i = 0; i < dofs_per_cell; ++i)
         {
-          const NumberType jxw = fe_values.JxW(q);
-          for (unsigned int i=0; i<dofs_per_cell; ++i)
-            cell_rhs(i) += fe_values.shape_value(i, q) * forcing_values[q] * jxw;
+          local_dirichlet(i) = u_dirichlet(local_dof_indices[i]);
+          if (std::abs(local_dirichlet(i)) > 1e-14)
+            needs_shift = true;
         }
 
-        for (unsigned int face_no=0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
+        forcing_function->value_list(fe_values.get_quadrature_points(), forcing_values);
+
+        if (needs_shift)
+        {
+          mu_function->value_list(fe_values.get_quadrature_points(), mu_values);
+          gamma_function->value_list(fe_values.get_quadrature_points(), gamma_values);
+          for (unsigned int q = 0; q < n_q_points; ++q)
+            for (unsigned int d = 0; d < dim; ++d)
+              beta_values[q][d] = beta_function->value(fe_values.quadrature_point(q), d);
+        }
+
+        // Volume integral: \int f * v minus Dirichlet shift (A * u_g)
+        for (unsigned int q = 0; q < n_q_points; ++q)
+        {
+          const NumberType jxw = fe_values.JxW(q);
+          NumberType u_g = 0;
+          Tensor<1, dim, NumberType> grad_u_g;
+          if (needs_shift)
+          {
+            for (unsigned int j = 0; j < dofs_per_cell; ++j)
+            {
+              u_g += local_dirichlet(j) * fe_values.shape_value(j, q);
+              for (unsigned int d = 0; d < dim; ++d)
+                grad_u_g[d] += local_dirichlet(j) * fe_values.shape_grad(j, q)[d];
+            }
+          }
+          for (unsigned int i = 0; i < dofs_per_cell; ++i)
+          {
+            NumberType rhs_val = forcing_values[q] * fe_values.shape_value(i, q);
+            if (needs_shift)
+            {
+              const NumberType shift =
+                mu_values[q] * (grad_u_g * fe_values.shape_grad(i, q)) +
+                (beta_values[q] * grad_u_g) * fe_values.shape_value(i, q) +
+                gamma_values[q] * u_g * fe_values.shape_value(i, q);
+              rhs_val -= shift;
+            }
+            cell_rhs(i) += rhs_val * jxw;
+          }
+        }
+
+        // Neumann BCs: \int mu * h * v
+        for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
           if (cell->at_boundary(face_no) && neumann_ids.contains(cell->face(face_no)->boundary_id()))
           {
             fe_face_values.reinit(cell, face_no);
             neumann_function->value_list(fe_face_values.get_quadrature_points(), neumann_values);
             mu_function->value_list(fe_face_values.get_quadrature_points(), mu_boundary_values);
-            for (unsigned int q=0; q<n_face_q_points; ++q)
+            for (unsigned int q = 0; q < n_face_q_points; ++q)
             {
               const NumberType jxw = fe_face_values.JxW(q);
               const NumberType neumann_term = mu_boundary_values[q] * neumann_values[q];
-              for (unsigned int i=0; i<dofs_per_cell; ++i)
+              for (unsigned int i = 0; i < dofs_per_cell; ++i)
                 cell_rhs(i) += fe_face_values.shape_value(i, q) * neumann_term * jxw;
             }
           }
 
-        cell->get_dof_indices(local_dof_indices);
         constraints.distribute_local_to_global(cell_rhs, local_dof_indices, system_rhs);
       }
     system_rhs.compress(VectorOperation::add);
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Assemble right hand side   (CPU/wall) " << time.cpu_time()
             << "s/" << time.wall_time() << 's' << std::endl;
 }
@@ -276,7 +333,9 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
             {
               smoother_data[0].smoothing_range = 1e-3;
               smoother_data[0].degree          = numbers::invalid_unsigned_int;
-              smoother_data[0].eig_cg_n_iterations = mg_matrices[0].m();
+              // Cap eigenvalue estimation iterations (coarse level can have many DoFs)
+              smoother_data[0].eig_cg_n_iterations =
+                std::min(mg_matrices[0].m(), static_cast<unsigned int>(200));
             }
           mg_matrices[level].compute_diagonal();
           smoother_data[level].preconditioner = mg_matrices[level].get_matrix_diagonal_inverse();
@@ -386,7 +445,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
     }
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Solve linear system       (CPU/wall) " << time.cpu_time()
                << "s/" << time.wall_time() << 's' << std::endl;
 }
@@ -411,7 +470,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
       "./", "solution", cycle, MPI_COMM_WORLD, 2
     );
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Output results            (CPU/wall) " << time.cpu_time()
                << "s/" << time.wall_time() << 's' << std::endl;
 }

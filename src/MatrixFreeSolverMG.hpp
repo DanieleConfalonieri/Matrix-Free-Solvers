@@ -162,8 +162,8 @@ private:
     dealii::LinearAlgebra::distributed::Vector<NumberType> solution;
     dealii::LinearAlgebra::distributed::Vector<NumberType> system_rhs;
 
-    /// Timing of the setup phase (stored for reporting).
-    NumberType setup_time;
+    /// Cumulative time across setup, assemble, solve, output (for reporting).
+    NumberType cumulative_time;
 
     /// Conditional output streams (print only on the master MPI rank).
     dealii::ConditionalOStream pcout;
