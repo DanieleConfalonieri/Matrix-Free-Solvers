@@ -2,31 +2,22 @@
 #define DIFFUSION_REACTION_HPP
 
 #include <deal.II/base/conditional_ostream.h>
+#include <deal.II/base/function.h>
 #include <deal.II/base/quadrature_lib.h>
-
-// MODIFICA 1: Sostituito fully_distributed_tria con la standard distributed tria
-// (necessaria per usare GridGenerator::hyper_cube in parallelo)
 #include <deal.II/distributed/tria.h>
-
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_tools.h>
-
-// MODIFICA 2: Inclusi gli elementi tensoriali (FE_Q) invece dei simpliciali
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/mapping_fe.h>
-
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria.h>
-
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_gmres.h>
 #include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
-#include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/vector.h>
-
 #include <deal.II/numerics/data_out.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
@@ -35,54 +26,51 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <set>
 
 using namespace dealii;
 
 /**
- * Class managing the differential problem.
+ * Matrix-based parallel solver for the ADR problem (aligned with matrix-free).
+ * All coefficients and BCs use shared_ptr<const Function<dim>> as in
+ * MatrixFreeSolver / MatrixFreeSolverMG. β can be non-constant; ∇·β is
+ * computed from beta_func->gradient() for γ_eff = γ + ∇·β.
  */
 class DiffusionReactionParallel
 {
 public:
-  // Physical dimension (1D, 2D, 3D)
   static constexpr unsigned int dim = 3;
-  class FunctionG : public Function<dim>
-  {
-  public:
-    // Constructor.
-    FunctionG()
-    {
-    }
 
-    // Evaluation.
-    virtual double
-    value(const Point<dim> &p,
-          const unsigned int /*component*/ = 0) const override
-    {
-      return 7.0;
-      //return std::sin(3.0 * M_PI * p[0]) + std::sin(2.0 * M_PI * p[1]);
-    }
-  };
-
-  // Constructor.
-  // MODIFICA 3: Sostituita la stringa del file con il livello di raffinamento
+  /**
+   * @param mesh_refinement_level Global refinement level for the unit hypercube.
+   * @param fe_degree Polynomial degree of FE_Q.
+   * @param mu_func Diffusion coefficient μ (scalar).
+   * @param beta_func Advection field β (vector-valued; gradient used for ∇·β).
+   * @param gamma_func Reaction coefficient γ.
+   * @param forcing_func Source term f.
+   * @param h_func Neumann data h (μ∇u·n = μh on Γ_N).
+   * @param g_func Dirichlet data g (u = g on Γ_D); same generality as h_func.
+   * @param enable_multigrid_ Use AMG preconditioner when true.
+   */
   DiffusionReactionParallel(const unsigned int mesh_refinement_level_,
-                    const unsigned int &r_,
-                    const std::function<double(const Point<dim> &)> &mu_,
-                    const std::function<Tensor<1, dim>(const Point<dim> &)> &b_,
-                    const std::function<double(const Point<dim> &)> &sigma_,
-                    const std::function<double(const Point<dim> &)> &f_,
-                    const std::function<double(const Point<dim> &)> &neumann_func_,
-                    const bool enable_multigrid_ = false)
+                            const unsigned int fe_degree_,
+                            std::shared_ptr<const Function<dim>> mu_func,
+                            std::shared_ptr<const Function<dim>> beta_func,
+                            std::shared_ptr<const Function<dim>> gamma_func,
+                            std::shared_ptr<const Function<dim>> forcing_func,
+                            std::shared_ptr<const Function<dim>> h_func,
+                            std::shared_ptr<const Function<dim>> g_func,
+                            const bool enable_multigrid_ = false)
     : mesh_refinement_level(mesh_refinement_level_)
-    , r(r_)
-    , mu(mu_)
-    , b(b_)
-    , sigma(sigma_)
-    , f(f_)
-    , neumann_func(neumann_func_)
-    , enable_multigrid(enable_multigrid_) // Abilitiamo il multigrid per default
+    , fe_degree(fe_degree_)
+    , mu_func(mu_func)
+    , beta_func(beta_func)
+    , gamma_func(gamma_func)
+    , forcing_func(forcing_func)
+    , h_func(h_func)
+    , g_func(g_func)
+    , enable_multigrid(enable_multigrid_)
     , mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , mesh(MPI_COMM_WORLD)
@@ -123,28 +111,17 @@ public:
                 const Function<dim>         &exact_solution) const;
 
 protected:
-  // MODIFICA 4: Rimosso mesh_file_name, inserito mesh_refinement_level
   const unsigned int mesh_refinement_level;
+  const unsigned int fe_degree;
 
-  // Polynomial degree.
-  const unsigned int r;
+  // ADR coefficients and BCs (shared_ptr<Function<dim>>, aligned with matrix-free)
+  std::shared_ptr<const Function<dim>> mu_func;
+  std::shared_ptr<const Function<dim>> beta_func;
+  std::shared_ptr<const Function<dim>> gamma_func;
+  std::shared_ptr<const Function<dim>> forcing_func;
+  std::shared_ptr<const Function<dim>> h_func;
+  std::shared_ptr<const Function<dim>> g_func;
 
-  // Diffusion coefficient.
-  std::function<double(const Point<dim> &)> mu;
-
-  // Bterm.
-  std::function<Tensor<1, dim>(const Point<dim> &)> b;
-
-  // Reaction coefficient.
-  std::function<double(const Point<dim> &)> sigma;
-
-  // Forcing term.
-  std::function<double(const Point<dim> &)> f;
-
-  // neumann_func term.
-  std::function<double(const Point<dim> &)> neumann_func;
-
-  // Enable multigrid preconditioning (default: false).
   const bool enable_multigrid;
 
   // Number of MPI processes.

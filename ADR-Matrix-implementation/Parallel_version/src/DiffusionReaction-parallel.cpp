@@ -1,5 +1,6 @@
 #include "DiffusionReaction-parallel.hpp"
 #include <deal.II/base/timer.h>
+#include <iomanip>
 
 void DiffusionReactionParallel::setup()
 {
@@ -26,14 +27,14 @@ void DiffusionReactionParallel::setup()
   {
     pcout << "Initializing the finite element space" << std::endl;
 
-    fe = std::make_unique<FE_Q<dim>>(r); //MoDIFICA 6: Sostituito FE_SimplexP con FE_Q, che è più adatto per ipercubi
+    fe = std::make_unique<FE_Q<dim>>(fe_degree);
 
     pcout << "  Degree                     = " << fe->degree << std::endl;
     pcout << "  DoFs per cell              = " << fe->dofs_per_cell
           << std::endl;
 
-    quadrature = std::make_unique<QGauss<dim>>(r + 1);
-    quadrature_boundary = std::make_unique<QGauss<dim - 1>>(r + 1);
+    quadrature = std::make_unique<QGauss<dim>>(fe_degree + 1);
+    quadrature_boundary = std::make_unique<QGauss<dim - 1>>(fe_degree + 1);
 
     pcout << "  Quadrature points per cell = " << quadrature->size()
           << std::endl;
@@ -139,32 +140,37 @@ void DiffusionReactionParallel::assemble()
 
     for (unsigned int q = 0; q < n_q; ++q)
     {
-      const double mu_loc = mu(fe_values.quadrature_point(q));
-      const double sigma_loc = sigma(fe_values.quadrature_point(q));
-      const double f_loc = f(fe_values.quadrature_point(q));
-      const Tensor<1, dim> b_loc = b(fe_values.quadrature_point(q));
+      const Point<dim> qp = fe_values.quadrature_point(q);
+      const double mu_loc = mu_func->value(qp);
+      const double gamma_loc = gamma_func->value(qp);
+      double div_beta_loc = 0.0;
+      for (unsigned int d = 0; d < dim; ++d)
+        div_beta_loc += beta_func->gradient(qp, d)[d];
+      const double gamma_eff_loc = gamma_loc + div_beta_loc; // γ_eff = γ + ∇·β
+      const double f_loc = forcing_func->value(qp);
+      Tensor<1, dim> beta_loc;
+      for (unsigned int d = 0; d < dim; ++d)
+        beta_loc[d] = beta_func->value(qp, d);
 
       for (unsigned int i = 0; i < dofs_per_cell; ++i)
       {
         for (unsigned int j = 0; j < dofs_per_cell; ++j)
         {
-          cell_matrix(i, j) += mu_loc *                     //
-                               fe_values.shape_grad(i, q) * //
-                               fe_values.shape_grad(j, q) * //
-                               fe_values.JxW(q);
+          // Diffusion: μ ∇u·∇v
+          cell_matrix(i, j) += mu_loc * fe_values.shape_grad(i, q) *
+                               fe_values.shape_grad(j, q) * fe_values.JxW(q);
 
-          cell_matrix(i, j) += sigma_loc *                   //
-                               fe_values.shape_value(i, q) * //
-                               fe_values.shape_value(j, q) * //
-                               fe_values.JxW(q);
-          cell_matrix(i, j) += (b_loc * fe_values.shape_grad(j, q)) * // b * grad(u)
-                                fe_values.shape_value(i, q) * // v
-                                fe_values.JxW(q);
+          // Reaction: γ_eff u v
+          cell_matrix(i, j) += gamma_eff_loc * fe_values.shape_value(i, q) *
+                               fe_values.shape_value(j, q) * fe_values.JxW(q);
+
+          // Advection: β·∇u v
+          cell_matrix(i, j) += (beta_loc * fe_values.shape_grad(j, q)) *
+                               fe_values.shape_value(i, q) * fe_values.JxW(q);
         }
 
-        cell_rhs(i) += f_loc *                       //
-                       fe_values.shape_value(i, q) * //
-                       fe_values.JxW(q);
+        // RHS: f v
+        cell_rhs(i) += f_loc * fe_values.shape_value(i, q) * fe_values.JxW(q);
       }
     }
     if (cell->at_boundary())
@@ -182,14 +188,12 @@ void DiffusionReactionParallel::assemble()
 
           for (unsigned int q = 0; q < quadrature_boundary->size(); ++q)
           {
+            const Point<dim> qp = fe_face_values.quadrature_point(q);
+            const double mu_loc = mu_func->value(qp);
+            const double h_loc = h_func->value(qp);
             for (unsigned int i = 0; i < dofs_per_cell; ++i)
-            {
-              const double mu_loc = mu(fe_face_values.quadrature_point(q)); 
-              cell_rhs(i) +=  mu_loc * // boundary integral: mu * h * v
-                              neumann_func(fe_face_values.quadrature_point(q)) * 
-                              fe_face_values.shape_value(i, q) * 
-                              fe_face_values.JxW(q);
-            }
+              cell_rhs(i) += mu_loc * h_loc * fe_face_values.shape_value(i, q) *
+                             fe_face_values.JxW(q);
           }
         }
       }
@@ -208,24 +212,20 @@ void DiffusionReactionParallel::assemble()
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
 
-  // Dirichlet boundary conditions.
+  // Dirichlet boundary conditions (u = g on Γ_D); g_func is as general as h_func.
+  if (!dirichlet_ids.empty() && g_func)
   {
     std::map<types::global_dof_index, double> boundary_values;
-    FunctionG bc_function;
+    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+    for (const auto &id : dirichlet_ids)
+      boundary_functions[id] = g_func.get();
 
-    if (!dirichlet_ids.empty())
-    {
-      std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-      for (const auto &id : dirichlet_ids)
-        boundary_functions[id] = &bc_function;
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             boundary_functions,
+                                             boundary_values);
 
-      VectorTools::interpolate_boundary_values(dof_handler,
-                                               boundary_functions,
-                                               boundary_values);
-
-      MatrixTools::apply_boundary_values(
-          boundary_values, system_matrix, solution, system_rhs, true);
-    }
+    MatrixTools::apply_boundary_values(
+        boundary_values, system_matrix, solution, system_rhs, true);
   }
 }
 
@@ -242,14 +242,14 @@ void DiffusionReactionParallel::solve()
     bool is_advection_zero = true;
     for (unsigned int d = 0; d < dim; ++d)
     {
-      if (std::abs(b(Point<dim>())[d]) > 1e-12)
+      if (std::abs(beta_func->value(Point<dim>(), d)) > 1e-12)
       {
         is_advection_zero = false;
         break;
       }
     }
 
-    // Tolleranza identica al Matrix-Free
+    // Tolerance aligned with matrix-free
     SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
     using VectorType = dealii::TrilinosWrappers::MPI::Vector;
 
@@ -374,8 +374,7 @@ DiffusionReactionParallel::compute_error(
     const VectorTools::NormType &norm_type,
     const Function<dim> &exact_solution) const
 {
-  // Usiamo la quadratura di Gauss standard (non Simplex)
-  const QGauss<dim> quadrature_error(r + 2);
+  const QGauss<dim> quadrature_error(fe_degree + 2);
 
   // Usiamo la mappatura nativa per elementi tensoriali 
   MappingQ<dim> mapping(1);
