@@ -56,7 +56,6 @@ int main (int argc, char *argv[])
         
         // Instantiate the solver with constant coefficients
         if(enable_multigrid){
-          printf("Running with MG preconditioner enabled.\n");
           MatrixFreeSolverMG<dimension,
                         degree_finite_element,
                         double> matrix_free_solver_mg(

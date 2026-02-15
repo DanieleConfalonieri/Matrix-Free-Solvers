@@ -41,7 +41,7 @@ MatrixFreeSolver<dim, fe_degree, NumberType>::MatrixFreeSolver(
   , dirichlet_ids(dirichlet_b_ids)
   , neumann_ids(neumann_b_ids)
   , mesh_refinement_level(mesh_refinement_level)
-  , setup_time(0.0)
+  , cumulative_time(0.0)
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
   , time_details(std::cout,
@@ -56,7 +56,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
 {
   Timer time;
   pcout << "Setting up system..." << std::endl;
-  setup_time = 0.0;
+  cumulative_time = 0.0;
   {
     // 1. Grid Generation
     GridGenerator::hyper_cube(triangulation, 0.0, 1.0, true);
@@ -88,7 +88,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
       constraints);
     constraints.close();
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Distribute DoFs & B.C.     (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
   time.restart();
 
@@ -120,11 +120,8 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
   system_matrix.initialize_dof_vector(solution);
   system_matrix.initialize_dof_vector(system_rhs);
 
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Setup matrix-free system   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
-  time.restart();
-  setup_time += time.wall_time();
-  time_details << "Setup matrix-free levels   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
 }
 
 /**
@@ -204,7 +201,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
             mu_function->value_list(fe_values.get_quadrature_points(), mu_values);
             gamma_function->value_list(fe_values.get_quadrature_points(), gamma_values);
             
-            // Popoling manually the beta function values at quadrature points (since it's a vector-valued function)
+            // Populating manually the beta function values at quadrature points (since it's a vector-valued function)
             for (unsigned int q = 0; q < n_q_points; ++q) {
               for (unsigned int d = 0; d < dim; ++d) {
                 beta_values[q][d] = beta_function->value(fe_values.quadrature_point(q), d);
@@ -276,7 +273,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
       // Compress vector (communicate ghost values in parallel)
       system_rhs.compress(VectorOperation::add);
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Assemble right hand side   (CPU/wall) " << time.cpu_time()
             << "s/" << time.wall_time() << 's' << std::endl;
   }
@@ -354,7 +351,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
 
   const double wall_time = time.wall_time();
   const double cpu_time = time.cpu_time();
-  setup_time += wall_time;
+  cumulative_time += wall_time;
   
   // Performance Metrics
   const double time_per_iter = wall_time / n_iter;
@@ -392,9 +389,9 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
     data_out.add_data_vector(solution, "solution");
     data_out.build_patches(mapping);
 
-    // Set flags for efficient I/O
+    // Set flags for efficient I/O 
     DataOutBase::VtkFlags vtk_flags;
-    //vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed; commented out to avoid version issues
+    vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
     data_out.set_flags(vtk_flags);
     
     data_out.write_vtu_with_pvtu_record(
@@ -405,7 +402,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
       2 // Number of digits in filename
     );
   }
-  setup_time += time.wall_time();
+  cumulative_time += time.wall_time();
   time_details << "Output results            (CPU/wall) " << time.cpu_time()
                << "s/" << time.wall_time() << 's' << std::endl;
 }

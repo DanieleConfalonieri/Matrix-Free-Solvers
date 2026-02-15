@@ -163,8 +163,8 @@ private:
     const unsigned int mesh_refinement_level; // Global refinement level for the initial mesh
 
 
-    // Utilities
-    NumberType setup_time;
+    // Utilities (cumulative time across setup, assemble, solve, output)
+    NumberType cumulative_time;
     dealii::ConditionalOStream pcout;       // Stream for parallel output (prints only on rank 0).
     dealii::ConditionalOStream time_details;// Stream for timing details.
 
