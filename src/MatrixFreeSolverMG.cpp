@@ -299,10 +299,13 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
   {
     system_matrix.compute_diagonal();
 
-    // Check if advection is zero
+    // Advection detection: β can be non-constant (evaluated at domain center).
+    Point<dim> sample_point;
+    for (unsigned int d = 0; d < dim; ++d)
+      sample_point[d] = 0.5;
     bool is_advection_zero = true;
     for (unsigned int d = 0; d < dim; ++d) {
-      if (std::abs(beta_function->value(Point<dim>(), d)) > 1e-12) {
+      if (std::abs(beta_function->value(sample_point, d)) > 1e-12) {
         is_advection_zero = false;
         break;
       }

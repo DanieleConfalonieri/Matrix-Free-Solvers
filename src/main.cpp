@@ -16,8 +16,6 @@
  */
 int main (int argc, char *argv[])
 {
-  try
-    {
         using namespace dealii;
 
         // Initialize MPI. The '1' argument limits console output to valid ASCII if needed.
@@ -45,72 +43,27 @@ int main (int argc, char *argv[])
         const bool enable_multigrid = (argc > 3) ? (std::strcmp(argv[3], "-mg") == 0) : false; // Set to true to enable multigrid preconditioning if "-mg" flag is provided
 
         const unsigned int dimension = 3;
-
         const unsigned int degree_finite_element = 2;
 
-        // Advection vector (example: non-zero x component)
-        std::vector<double> beta_vector(dimension, 0.0);
-        beta_vector[0] = 1.0; // Example: set beta_x = 1.0
-        beta_vector[1] = -1.0; // beta_y = 0.0
-        beta_vector[2] = 1.0; // beta_z = 0.0
-        
-        // Instantiate the solver with constant coefficients
-        if(enable_multigrid){
-          MatrixFreeSolverMG<dimension,
-                        degree_finite_element,
-                        double> matrix_free_solver_mg(
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(3.0), // Mu
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(beta_vector), // Beta
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0), // Gamma
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0), // Forcing
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0),  // Neumann value
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(7.0),  // Dirichlet value
-                            std::set<types::boundary_id>{1,2,3,4}, // Apply Dirichlet to all boundaries
-                            std::set<types::boundary_id>{0,5},  // Apply Neumann to all boundaries
-                            mesh_refinement_level // Global refinement level for the initial mesh
-                        );
-          matrix_free_solver_mg.run(profiling_run);
+        // Problem coefficients and BCs (shared by MG and non-MG solvers)
+        const std::vector<double> beta_components = {1.0, -1.0, 1.0};
+        const auto mu     = std::make_shared<Functions::ConstantFunction<dimension, double>>(3.0);
+        const auto beta   = std::make_shared<Functions::ConstantFunction<dimension, double>>(beta_components);
+        const auto gamma  = std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0);
+        const auto forcing = std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0);
+        const auto h      = std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0);
+        const auto g      = std::make_shared<Functions::ConstantFunction<dimension, double>>(7.0);
+        const std::set<types::boundary_id> dirichlet_ids = {1, 2, 3, 4};
+        const std::set<types::boundary_id> neumann_ids   = {0, 5};
+
+        if (enable_multigrid) {
+          MatrixFreeSolverMG<dimension, degree_finite_element, double> solver(
+              mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, mesh_refinement_level);
+          solver.run(profiling_run);
         } else {
-          MatrixFreeSolver<dimension,
-                        degree_finite_element,
-                        double> matrix_free_solver(
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(3.0), // Mu
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(beta_vector), // Beta
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0), // Gamma
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0), // Forcing
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0),  // Neumann value
-                            std::make_shared<Functions::ConstantFunction<dimension, double>>(7.0),  // Dirichlet value
-                            std::set<types::boundary_id>{1,2,3,4}, // Apply Dirichlet to all boundaries
-                            std::set<types::boundary_id>{0,5},  // Apply Neumann to all boundaries
-                            mesh_refinement_level // Global refinement level for the initial mesh
-                        );
-          matrix_free_solver.run(profiling_run);
+          MatrixFreeSolver<dimension, degree_finite_element, double> solver(
+              mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, mesh_refinement_level);
+          solver.run(profiling_run);
         }
-    }
-  catch (std::exception &exc)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Exception on processing: " << std::endl
-                << exc.what() << std::endl
-                << "Aborting!" << std::endl;
-      std::cerr << "----------------------------------------------------"
-                << std::endl;
-      return 1;
-    }
-  catch (...)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Unknown exception!" << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      return 1;
-    }
   return 0;
 }

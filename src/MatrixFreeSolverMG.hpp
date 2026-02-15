@@ -66,7 +66,7 @@ public:
      * @brief Construct the MG-enabled matrix-free solver.
      *
      * @param mu_func Diffusion coefficient function (shared pointer).
-     * @param beta_func Advection field function (shared pointer).
+     * @param beta_func Advection field (shared pointer).
      * @param gamma_func Reaction coefficient function (shared pointer).
      * @param forcing_func Volume forcing / source term (shared pointer).
      * @param neumann_func Neumann boundary value function (shared pointer).
