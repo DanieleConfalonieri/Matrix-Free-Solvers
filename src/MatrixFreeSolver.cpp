@@ -425,5 +425,16 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::run(const bool profiling_run)
 }
 
 // Explicit template instantiations
+template class MatrixFreeSolver<2, 1, double>;
 template class MatrixFreeSolver<2, 2, double>;
+template class MatrixFreeSolver<2, 3, double>;
+template class MatrixFreeSolver<2, 4, double>;
+template class MatrixFreeSolver<2, 5, double>;
+template class MatrixFreeSolver<2, 6, double>;
+
+template class MatrixFreeSolver<3, 1, double>;
 template class MatrixFreeSolver<3, 2, double>;
+template class MatrixFreeSolver<3, 3, double>;
+template class MatrixFreeSolver<3, 4, double>;
+template class MatrixFreeSolver<3, 5, double>;
+template class MatrixFreeSolver<3, 6, double>;
