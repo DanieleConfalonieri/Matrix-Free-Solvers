@@ -37,12 +37,12 @@ MatrixFreeSolverMG<dim, fe_degree, NumberType>::MatrixFreeSolverMG(
   , dirichlet_function(dirichlet_func)
   , dirichlet_ids(dirichlet_b_ids)
   , neumann_ids(neumann_b_ids)
-  , mesh_refinement_level(mesh_refinement_level)
   , cumulative_time(0.0)
   , pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0))
   , time_details(std::cout,
                  (true && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0)) // Change false to true for profiling
+  , mesh_refinement_level(mesh_refinement_level)
 {}
 
 template <int dim, int fe_degree, std::floating_point NumberType>
