@@ -64,9 +64,6 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::setup_system()
     dof_handler.distribute_dofs(fe);
     dof_handler.distribute_mg_dofs(); // Added for MG
 
-    pcout << "Number of degrees of freedom: " << dof_handler.n_dofs()
-          << std::endl;
-
     // 3. Constraints (Dirichlet BCs)
     constraints.clear();
     constraints.reinit(DoFTools::extract_locally_relevant_dofs(dof_handler));

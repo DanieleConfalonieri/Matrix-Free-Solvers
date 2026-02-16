@@ -7,25 +7,29 @@ set(CMAKE_CXX_STANDARD 20) # Required for <concepts>
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Complete MatrixFree solver
-add_executable(adr_solver
-    src/main.cpp                 # Il main della simulazione
-    src/MatrixFreeSolver.cpp     # L'implementazione del solver (Decommentato!)
-    src/MatrixFreeSolverMG.cpp   # Implementation of MG-enabled solver
-    src/ADROperator.cpp          # L'implementazione dell'operatore
+add_executable(matrix_free
+    src/main.cpp
+    src/MatrixFreeSolver.cpp
+    src/MatrixFreeSolverMG.cpp
+    src/ADROperator.cpp
     
     # Headers (Opzionali per la compilazione, utili per farli vedere agli IDE)
     src/MatrixFreeSolver.hpp
     src/ADROperator.hpp
 )
 
-deal_ii_setup_target(adr_solver)
+deal_ii_setup_target(matrix_free)
 
 # Complete MatrixBased Solver
-add_executable(matrix_based
-                src/exercise-01-parallel.cpp
-                src/DiffusionReaction-parallel.cpp
-# Headers
-src/DiffusionReaction-parallel.hpp)
+add_executable(
+    matrix_based
+    src/exercise-01-parallel.cpp
+    src/DiffusionReaction-parallel.cpp
+
+    # Headers
+    src/DiffusionReaction-parallel.hpp
+)
+
 deal_ii_setup_target(matrix_based)
 
 #Testing operator
