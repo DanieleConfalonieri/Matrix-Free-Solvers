@@ -485,9 +485,9 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
     data_out.add_data_vector(solution, "solution");
     data_out.build_patches(mapping);
 
-    DataOutBase::VtkFlags vtk_flags;
-    vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
-    data_out.set_flags(vtk_flags);
+    //DataOutBase::VtkFlags vtk_flags;
+    //vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
+    //data_out.set_flags(vtk_flags);
     
     data_out.write_vtu_with_pvtu_record(
       "./", "solution", cycle, MPI_COMM_WORLD, 2
