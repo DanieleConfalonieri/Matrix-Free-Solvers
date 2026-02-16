@@ -297,6 +297,25 @@ void DiffusionReactionParallel::solve()
     }
 
     n_iter = solver_control.last_step();
+
+    IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
+    AffineConstraints<double> constraints;
+    constraints.clear();
+    constraints.reinit(locally_relevant_dofs);
+    
+    if (!dirichlet_ids.empty() && g_func)
+    {
+      std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+      for (const auto &id : dirichlet_ids)
+        boundary_functions[id] = g_func.get();
+
+      VectorTools::interpolate_boundary_values(dof_handler,
+                                               boundary_functions,
+                                               constraints);
+    }
+    constraints.close();
+    
+    constraints.distribute(solution);
   }
 
   // 3. Stesse Metriche di Performance del Matrix-Free
