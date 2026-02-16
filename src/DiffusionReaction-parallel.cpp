@@ -90,6 +90,23 @@ void DiffusionReactionParallel::assemble()
   pcout << "===============================================" << std::endl;
 
   pcout << "  Assembling the linear system" << std::endl;
+  // Constraints setup
+  IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
+  AffineConstraints<double> constraints;
+  constraints.clear();
+  constraints.reinit(locally_relevant_dofs);
+
+  if (!dirichlet_ids.empty() && g_func)
+  {
+    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+    for (const auto &id : dirichlet_ids)
+      boundary_functions[id] = g_func.get();
+
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             boundary_functions,
+                                             constraints);
+  }
+  constraints.close();
 
   // Number of local DoFs for each element.
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
@@ -155,15 +172,15 @@ void DiffusionReactionParallel::assemble()
       {
         for (unsigned int j = 0; j < dofs_per_cell; ++j)
         {
-          // Diffusion: μ ∇u·∇v
+          // Diffusion: mu * grad(u)·grad(v)
           cell_matrix(i, j) += mu_loc * fe_values.shape_grad(i, q) *
                                fe_values.shape_grad(j, q) * fe_values.JxW(q);
 
-          // Reaction: γ_eff u v
+          // Reaction: gamma_eff*u*v
           cell_matrix(i, j) += gamma_eff_loc * fe_values.shape_value(i, q) *
                                fe_values.shape_value(j, q) * fe_values.JxW(q);
 
-          // Advection: β·∇u v
+          // Advection: beta*grad(u)*v
           cell_matrix(i, j) += (beta_loc * fe_values.shape_grad(j, q)) *
                                fe_values.shape_value(i, q) * fe_values.JxW(q);
         }
@@ -200,8 +217,8 @@ void DiffusionReactionParallel::assemble()
 
     cell->get_dof_indices(dof_indices);
 
-    system_matrix.add(dof_indices, cell_matrix);
-    system_rhs.add(dof_indices, cell_rhs);
+    constraints.distribute_local_to_global(cell_matrix, cell_rhs, dof_indices,
+                                       system_matrix, system_rhs);
   }
 
   // Each process might have written to some rows it does not own (for instance,
@@ -210,22 +227,6 @@ void DiffusionReactionParallel::assemble()
   // information: the compress method allows to do this.
   system_matrix.compress(VectorOperation::add);
   system_rhs.compress(VectorOperation::add);
-
-  // Dirichlet boundary conditions (u = g on Γ_D); g_func is as general as h_func.
-  if (!dirichlet_ids.empty() && g_func)
-  {
-    std::map<types::global_dof_index, double> boundary_values;
-    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-    for (const auto &id : dirichlet_ids)
-      boundary_functions[id] = g_func.get();
-
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values);
-
-    MatrixTools::apply_boundary_values(
-        boundary_values, system_matrix, solution, system_rhs, true);
-  }
 }
 
 void DiffusionReactionParallel::solve()
