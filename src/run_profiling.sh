@@ -26,12 +26,13 @@ for p in {1..6}; do
         
         # mpirun (parameters: profiling=1, level=L, mg=MULTIGRID_OPTION, degree=p)
         OUTPUT=$(mpirun -n $CORES $EXEC_MF 1 $L "$MULTIGRID_OPTION" $p)
+        echo "$OUTPUT" # Print output for debugging
         
         # Extract data using grep e regex 
         DOFS=$(echo "$OUTPUT" | grep -oP 'Number of degrees of freedom:\s*\K\d+')
         ITERS=$(echo "$OUTPUT" | grep -oP 'Solved in\s*\K\d+')
-        TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
-        THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+')
+        # TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
+        # THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+')
         
         # If extraction successful, append to CSV, otherwise log failure
         if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
