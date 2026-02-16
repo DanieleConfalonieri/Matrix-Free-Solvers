@@ -371,16 +371,12 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
   // Throughput (Weak Scaling)
   const double throughput_mdofs = dof_handler.n_dofs() / time_per_iter / 1e6; // MDoFs/s
 
-  // Standard Output
-  pcout << "   Solved in " << n_iter << " iterations." << std::endl;
-
-  // Detailed Output (for profiling)
-  time_details << "Solve linear system       (CPU/wall) " << cpu_time
-               << "s/" << wall_time << 's' << std::endl;
+  time_details << "   Solve linear system       (CPU/wall) " << cpu_time
+               << " s/" << wall_time << 's' << std::endl;
                
-  time_details << "   iterations             " << n_iter << std::endl;
-  time_details << "   avg time/iter (wall)   " << time_per_iter << " s" << std::endl;
-  time_details << "   throughput             " << throughput_mdofs << " MDoFs/s" << std::endl;
+  time_details << "   Solved in " << n_iter << " iterations." << std::endl;
+  time_details << "   Time per iter:   " << time_per_iter << " s" << std::endl;
+  time_details << "   Throughput:             " << throughput_mdofs << " MDoFs/s" << std::endl;  
 }
 
 /**

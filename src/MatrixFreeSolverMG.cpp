@@ -385,7 +385,6 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       }
       
       constraints.distribute(solution);
-      pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
       n_iter = solver_control.last_step();
 
     }
@@ -454,7 +453,6 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       }
       
       constraints.distribute(solution);
-      pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
       n_iter = solver_control.last_step();
 
     }
@@ -470,12 +468,12 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
   const double throughput_mdofs = dof_handler.n_dofs() / time_per_iter / 1e6; // MDoFs/s
 
   // Detailed Output (for profiling)
-  time_details << "Solve linear system       (CPU/wall) " << cpu_time
-               << "s/" << wall_time << 's' << std::endl;
+  time_details << "   Solve linear system       (CPU/wall) " << cpu_time
+               << " s/" << wall_time << 's' << std::endl;
                
-  time_details << "   iterations             " << n_iter << std::endl;
-  time_details << "   avg time/iter (wall)   " << time_per_iter << " s" << std::endl;
-  time_details << "   throughput             " << throughput_mdofs << " MDoFs/s" << std::endl;
+  time_details << "   Solved in " << n_iter << " iterations." << std::endl;
+  time_details << "   Time per iter:   " << time_per_iter << " s" << std::endl;
+  time_details << "   Throughput:             " << throughput_mdofs << " MDoFs/s" << std::endl;
 }
 
 template <int dim, int fe_degree, std::floating_point NumberType>
@@ -499,8 +497,8 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
     );
   }
   cumulative_time += time.wall_time();
-  time_details << "Output results            (CPU/wall) " << time.cpu_time()
-               << "s/" << time.wall_time() << 's' << std::endl;
+  time_details << "   Output results            (CPU/wall) " << time.cpu_time()
+               << " s/" << time.wall_time() << 's' << std::endl;
 }
 
 template <int dim, int fe_degree, std::floating_point NumberType>

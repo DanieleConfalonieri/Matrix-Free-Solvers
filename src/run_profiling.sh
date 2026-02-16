@@ -6,14 +6,14 @@ CSV_FILE="hpc_benchmark_results.csv"
 
 # Executables name
 EXEC_MF="./adr_solver"
-EXEC_MB="./exercise-01-parallel" 
+EXEC_MB="./matrix_based" 
 
 # Multigrid option
 MULTIGRID_OPTION="-mg" # use -mg for multigrid, other for no multigrid
 
 # MatrixBased will likely run out of memory for higher levels, so we may want
 # to set different max levels for the two benchmarks
-MAX_LEVEL_MF=6
+MAX_LEVEL_MF=5
 MAX_LEVEL_MB=5 
 
 echo "Solver,Degree,Refinement,DoFs,Iterations,TimePerIter(s),Throughput(MDoFs/s)" > $CSV_FILE
