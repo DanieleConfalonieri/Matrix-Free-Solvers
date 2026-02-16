@@ -6,7 +6,7 @@ include(${CMAKE_SOURCE_DIR}/common/cmake-common.cmake)
 set(CMAKE_CXX_STANDARD 20) # Required for <concepts>
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Complete solver
+# Complete MatrixFree solver
 add_executable(adr_solver
     src/main.cpp                 # Il main della simulazione
     src/MatrixFreeSolver.cpp     # L'implementazione del solver (Decommentato!)
@@ -20,6 +20,13 @@ add_executable(adr_solver
 
 deal_ii_setup_target(adr_solver)
 
+# Complete MatrixBased Solver
+add_executable(matrix_based
+                src/exercise-01-parallel.cpp
+                src/DiffusionReaction-parallel.cpp
+# Headers
+src/DiffusionReaction-parallel.hpp)
+deal_ii_setup_target(matrix_based)
 
 #Testing operator
 #add_executable(operator_test
