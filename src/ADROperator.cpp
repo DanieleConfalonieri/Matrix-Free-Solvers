@@ -228,23 +228,19 @@ void ADROperator<dim, fe_degree, NumberType>::local_compute_diagonal(
     FEEvaluation<dim, fe_degree, fe_degree + 1, 1, NumberType> &phi) const
 {
     const unsigned int cell = phi.get_current_cell_index();
-
     phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
     for (const unsigned int q : phi.quadrature_point_indices())
     {
         const auto mu_val    = mu[cell][q];
+        const auto beta_val  = beta[cell][q];
         const auto gamma_val = gamma_eff[cell][q];
 
-        // Diagonal contribution from diffusion: \mu * (\nabla \phi_i \cdot \nabla \phi_i)
-        // FEEvaluation handles the squaring implicitly when we submit the gradient back
-        phi.submit_gradient(mu_val * phi.get_gradient(q), q);
-        
-        // Diagonal contribution from reaction: \gamma_{eff} * (\phi_i * \phi_i)
-        phi.submit_value(gamma_val * phi.get_value(q), q);
-        
-        // Note: The advective term \beta \cdot \nabla \phi_i * \phi_i is usually skew-symmetric
-        // and its contribution to the diagonal is often zero or negligible for preconditioning.
+        auto grad_term = mu_val * phi.get_gradient(q);
+        auto val_term  = (beta_val * phi.get_gradient(q)) + (gamma_val * phi.get_value(q));
+
+        phi.submit_gradient(grad_term, q);
+        phi.submit_value(val_term, q);
     }
     phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
 }
