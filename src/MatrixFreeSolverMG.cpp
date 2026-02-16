@@ -368,7 +368,8 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       PreconditionMG<dim, VectorType, MGTransferMatrixFree<dim, NumberType>>
         preconditioner(dof_handler, mg, mg_transfer);
 
-      SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
+      SolverControl solver_control (10000, 1e-12);
+      pcout << "  Solver tolerance: " << solver_control.tolerance() << std::endl;
       SolverCG<VectorType> solver(solver_control); // Use of CG
       
       constraints.set_zero(solution);
@@ -436,7 +437,8 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       PreconditionMG<dim, VectorType, MGTransferMatrixFree<dim, NumberType>>
         preconditioner(dof_handler, mg, mg_transfer);
 
-      SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
+      SolverControl solver_control (10000, 1e-12);
+      pcout << "  Solver tolerance: " << solver_control.tolerance() << std::endl;
       SolverGMRES<VectorType> solver(solver_control); // Use of GMRES
       
       constraints.set_zero(solution);

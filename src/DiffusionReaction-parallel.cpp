@@ -242,7 +242,8 @@ void DiffusionReactionParallel::solve()
     }
 
     // Tolerance aligned with matrix-free
-    SolverControl solver_control(1000, 1e-12 * system_rhs.l2_norm());
+    SolverControl solver_control(10000, 1e-12);
+    pcout << "  Solver tolerance: " << solver_control.tolerance() << std::endl;
     using VectorType = dealii::TrilinosWrappers::MPI::Vector;
 
     try
