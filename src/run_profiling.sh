@@ -9,7 +9,7 @@ EXEC_MF="./adr_solver"
 EXEC_MB="./exercise-01-parallel" 
 
 # Multigrid option
-MULTIGRID_OPTION="-no" # use -mg for multigrid, other for no multigrid
+MULTIGRID_OPTION="-mg" # use -mg for multigrid, other for no multigrid
 
 # MatrixBased will likely run out of memory for higher levels, so we may want
 # to set different max levels for the two benchmarks
@@ -26,16 +26,15 @@ for p in {1..6}; do
         
         # mpirun (parameters: profiling=1, level=L, mg=MULTIGRID_OPTION, degree=p)
         OUTPUT=$(mpirun -n $CORES $EXEC_MF 1 $L "$MULTIGRID_OPTION" $p)
-        echo "$OUTPUT" # Print output for debugging
         
         # Extract data using grep e regex 
         DOFS=$(echo "$OUTPUT" | grep -oP 'Number of degrees of freedom:\s*\K\d+')
         ITERS=$(echo "$OUTPUT" | grep -oP 'Solved in\s*\K\d+')
-        # TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
-        # THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+')
+        TIME_ITER=$(echo "$OUTPUT" | grep -oP '\(wall\)\s*\K[0-9.]+')
+        THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'throughput\s*\K[0-9.]+\s*MDoFs/s')
         
         # If extraction successful, append to CSV, otherwise log failure
-        if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
+        if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ] && [ ! -z "$ITERS" ] && [ ! -z "$TIME_ITER" ]; then
             echo "MatrixFree,$p,$L,$DOFS,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
         else
             echo "   [!] Fallito o OOM per p=$p, Level=$L"
@@ -54,10 +53,10 @@ for p in {1..6}; do
         
         DOFS=$(echo "$OUTPUT" | grep -oP 'Number of degrees of freedom:\s*\K\d+')
         ITERS=$(echo "$OUTPUT" | grep -oP 'Solved in\s*\K\d+')
-        TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
-        THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+')
+        TIME_ITER=$(echo "$OUTPUT" | grep -oP '\(wall\)\s*\K[0-9.]+')
+        THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'throughput\s*\K[0-9.]+\s*MDoFs/s')
         
-        if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
+        if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ] && [ ! -z "$ITERS" ] && [ ! -z "$TIME_ITER" ]; then
             echo "MatrixBased,$p,$L,$DOFS,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
         else
             echo "   [!] Fallito o OOM per p=$p, Level=$L"
