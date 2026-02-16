@@ -75,6 +75,7 @@ public:
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , mesh(MPI_COMM_WORLD)
     , pcout(std::cout, mpi_rank == 0)
+    , cumulative_time(0.0)
   {}
 
   // Initialization.
@@ -164,6 +165,8 @@ protected:
   std::set<types::boundary_id> neumann_ids;
   // Dirichlet boundary ids to be set by the caller.
   std::set<types::boundary_id> dirichlet_ids;
+  // Utilities
+  double cumulative_time; // Cumulative time across setup, assemble, solve, output.
 };
 
 #endif

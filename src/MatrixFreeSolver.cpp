@@ -54,8 +54,9 @@ MatrixFreeSolver<dim, fe_degree, NumberType>::MatrixFreeSolver(
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
 {
+  pcout << "===============================================" << std::endl;
+  pcout << "Initializing the mesh" << std::endl;
   Timer time;
-  pcout << "Setting up system..." << std::endl;
   cumulative_time = 0.0;
   {
     // 1. Grid Generation
@@ -66,9 +67,6 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
 
     // 2. DoF Distribution
     dof_handler.distribute_dofs(fe);
-
-    pcout << "Number of degrees of freedom: " << dof_handler.n_dofs()
-          << std::endl;
 
     // 3. Constraints (Dirichlet BCs)
     constraints.clear();
@@ -87,12 +85,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
       boundary_functions,
       constraints);
     constraints.close();
-  }
-  cumulative_time += time.wall_time();
-  time_details << "Distribute DoFs & B.C.     (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
-  time.restart();
-
-  {
+  
     // 4. MatrixFree Initialization
     typename MatrixFree<dim, NumberType>::AdditionalData additional_data;
     additional_data.tasks_parallel_scheme =
@@ -111,7 +104,6 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
                               additional_data);
 
     system_matrix.initialize(this->matrix_free);
-  }
   
   // 5. Coefficient Evaluation (Pre-computation)
   system_matrix.evaluate_coefficients(*mu_function, *beta_function, *gamma_function);
@@ -120,8 +112,23 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
   system_matrix.initialize_dof_vector(solution);
   system_matrix.initialize_dof_vector(system_rhs);
 
+  }
   cumulative_time += time.wall_time();
+  const QGauss<dim> quadrature(fe.degree + 1);
+
+  // Prints
   time_details << "Setup matrix-free system   (CPU/wall) " << time.cpu_time() << "s/ " << time.wall_time() << std::endl;
+  pcout << "  Number of elements = " << triangulation.n_global_active_cells()
+        << std::endl;
+  pcout << "-----------------------------------------------" << std::endl;
+  pcout << "  Degree                     = " << fe.degree << std::endl;
+  pcout << "  DoFs per cell              = " << fe.dofs_per_cell
+        << std::endl;
+  pcout << "  Quadrature points per cell = " << quadrature.size()
+        << std::endl;
+  pcout << "-----------------------------------------------" << std::endl;
+  pcout << "Number of degrees of freedom: " << dof_handler.n_dofs() << std::endl;  
+  pcout << "-----------------------------------------------" << std::endl;
 }
 
 /**
@@ -130,9 +137,9 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::setup_system()
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
 {
-  Timer time;
-  
+  pcout << "===============================================" << std::endl;  
   pcout << "Assembling right hand side..." <<  std::endl;
+  Timer time;
   {
     system_rhs = 0;
 
@@ -274,7 +281,7 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
       system_rhs.compress(VectorOperation::add);
   }
   cumulative_time += time.wall_time();
-  time_details << "Assemble right hand side   (CPU/wall) " << time.cpu_time()
+  time_details << "Assembly right hand side   (CPU/wall) " << time.cpu_time()
             << "s/" << time.wall_time() << 's' << std::endl;
   }
 
@@ -288,8 +295,10 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::assemble_rhs()
 template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
 {
-  Timer time;
+  pcout << "===============================================" << std::endl;
   pcout << "Solving linear system..." << std::endl;
+  
+  Timer time;
   unsigned int n_iter = 0; 
   {
     // Compute the diagonal approximation for preconditioning
