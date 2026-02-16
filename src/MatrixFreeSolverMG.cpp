@@ -296,6 +296,7 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
 {
   Timer time;
   pcout << "Solving linear system..." << std::endl;
+  int n_iter = 0;
   {
     system_matrix.compute_diagonal();
 
@@ -379,6 +380,8 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       
       constraints.distribute(solution);
       pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
+      n_iter = solver_control.last_step();
+
     }
     else
     {
@@ -446,11 +449,27 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
       
       constraints.distribute(solution);
       pcout << "   Solved in " << solver_control.last_step() << " iterations." << std::endl;
+      n_iter = solver_control.last_step();
+
     }
   }
-  cumulative_time += time.wall_time();
-  time_details << "Solve linear system       (CPU/wall) " << time.cpu_time()
-               << "s/" << time.wall_time() << 's' << std::endl;
+  const double wall_time = time.wall_time();
+  const double cpu_time = time.cpu_time();
+  cumulative_time += wall_time;
+  
+  // Performance Metrics
+  const double time_per_iter = wall_time / n_iter;
+  
+  // Throughput (Weak Scaling)
+  const double throughput_mdofs = dof_handler.n_dofs() / time_per_iter / 1e6; // MDoFs/s
+
+  // Detailed Output (for profiling)
+  time_details << "Solve linear system       (CPU/wall) " << cpu_time
+               << "s/" << wall_time << 's' << std::endl;
+               
+  time_details << "   iterations             " << n_iter << std::endl;
+  time_details << "   avg time/iter (wall)   " << time_per_iter << " s" << std::endl;
+  time_details << "   throughput             " << throughput_mdofs << " MDoFs/s" << std::endl;
 }
 
 template <int dim, int fe_degree, std::floating_point NumberType>
