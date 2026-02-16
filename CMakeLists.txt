@@ -6,9 +6,12 @@ include(${CMAKE_SOURCE_DIR}/common/cmake-common.cmake)
 set(CMAKE_CXX_STANDARD 20) # Required for <concepts>
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+### VALIDATION
+
 # Complete MatrixFree solver
-add_executable(matrix_free
-    src/main.cpp
+add_executable(
+    validation_free
+    src/validation_free.cpp
     src/MatrixFreeSolver.cpp
     src/MatrixFreeSolverMG.cpp
     src/ADROperator.cpp
@@ -18,19 +21,49 @@ add_executable(matrix_free
     src/ADROperator.hpp
 )
 
-deal_ii_setup_target(matrix_free)
+deal_ii_setup_target(validation_free)
 
 # Complete MatrixBased Solver
 add_executable(
-    matrix_based
-    src/exercise-01-parallel.cpp
+    validation_based
+    src/validation_based.cpp
     src/DiffusionReaction-parallel.cpp
 
     # Headers
     src/DiffusionReaction-parallel.hpp
 )
 
-deal_ii_setup_target(matrix_based)
+deal_ii_setup_target(validation_based)
+
+### PROFILING
+
+# Complete MatrixFree solver
+add_executable(
+    profiling_free
+    src/profiling_free.cpp
+    src/MatrixFreeSolver.cpp
+    src/MatrixFreeSolverMG.cpp
+    src/ADROperator.cpp
+    
+    # Headers (Opzionali per la compilazione, utili per farli vedere agli IDE)
+    src/MatrixFreeSolver.hpp
+    src/ADROperator.hpp
+)
+
+deal_ii_setup_target(profiling_free)
+
+# Complete MatrixBased Solver
+add_executable(
+    profiling_based
+    src/profiling_based.cpp
+    src/DiffusionReaction-parallel.cpp
+
+    # Headers
+    src/DiffusionReaction-parallel.hpp
+)
+
+deal_ii_setup_target(profiling_based)
+
 
 #Testing operator
 #add_executable(operator_test
