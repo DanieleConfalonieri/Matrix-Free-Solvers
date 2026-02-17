@@ -252,6 +252,13 @@ template class ADROperator<2, 3, double>;
 template class ADROperator<2, 4, double>;
 template class ADROperator<2, 5, double>;
 template class ADROperator<2, 6, double>;
+template class ADROperator<2, 7, double>;
+template class ADROperator<2, 8, double>;
+template class ADROperator<2, 9, double>;
+template class ADROperator<2, 10, double>;
+template class ADROperator<2, 11, double>;
+template class ADROperator<2, 12, double>;
+
 
 template class ADROperator<3, 1, double>;
 template class ADROperator<3, 2, double>;
@@ -259,3 +266,9 @@ template class ADROperator<3, 3, double>;
 template class ADROperator<3, 4, double>;
 template class ADROperator<3, 5, double>;
 template class ADROperator<3, 6, double>;
+template class ADROperator<3, 7, double>;
+template class ADROperator<3, 8, double>;
+template class ADROperator<3, 9, double>;
+template class ADROperator<3, 10, double>;
+template class ADROperator<3, 11, double>;
+template class ADROperator<3, 12, double>;

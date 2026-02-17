@@ -101,8 +101,14 @@ int main (int argc, char *argv[])
               case 4: run_solver_for_degree(std::integral_constant<int, 4>{}); break;
               case 5: run_solver_for_degree(std::integral_constant<int, 5>{}); break;
               case 6: run_solver_for_degree(std::integral_constant<int, 6>{}); break;
+              case 7: run_solver_for_degree(std::integral_constant<int, 7>{}); break;
+              case 8: run_solver_for_degree(std::integral_constant<int, 8>{}); break;
+              case 9: run_solver_for_degree(std::integral_constant<int, 9>{}); break;
+              case 10: run_solver_for_degree(std::integral_constant<int, 10>{}); break;
+              case 11: run_solver_for_degree(std::integral_constant<int, 11>{}); break;
+              case 12: run_solver_for_degree(std::integral_constant<int, 12>{}); break;
               default:
-                  pcout << "Unsupported FE degree for multigrid. Please choose between 1 and 6." << std::endl;
+                  pcout << "Unsupported FE degree for multigrid. Please choose between 1 and 12." << std::endl;
                   return 1;
           }
             return 0;
