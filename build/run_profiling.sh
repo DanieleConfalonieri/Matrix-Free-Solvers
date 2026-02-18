@@ -13,7 +13,7 @@ MAX_LEVEL_MB=3
 CORES_LIST="$(seq 8 4 34) $(seq 36 10 56)"
 
 # Intestazione CSV (Aggiunta colonna Cores all'inizio)
-echo "Cores,Solver,Degree,Refinement,SetupSystemCPU,SetupSystemWall,NumberOfElements,DoFs,DoFsPerCell,QPointsPerCell,RhsCpu,RhsWall,SolvingLinearSystemCPU,SolvingLinearSystemWall,Iterations,TimePerIter(s),Throughput(MDoFs/s),OutputResultCpu,OutputResultWall" > $CSV_FILE
+echo "Cores,Solver,Degree,Refinement,SetupSystemCPU,SetupSystemWall,NumberOfElements,DoFs,DoFsPerCell,QPointsPerCell,RhsCpu,RhsWall,SolvingLinearSystemCPU,SolvingLinearSystemWall,Iterations,TimePerIter(s),Throughput(MDoFs/s)" > $CSV_FILE
 
 # --- Matrix-Free Benchmark ---
 echo "=== Profiling Matrix-Free ==="
