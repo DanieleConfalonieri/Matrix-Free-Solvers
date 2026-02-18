@@ -12,6 +12,16 @@
 using namespace dealii;
 
 template <int dim>
+class ExactSolution : public Function<dim>
+{
+public:
+  virtual double value(const Point<dim> &p, const unsigned int /*component*/ = 0) const override
+  {
+    return std::sin(M_PI * p[0]) * std::sin(M_PI * p[1]) * std::sin(M_PI * p[2]);
+  }
+};
+
+template <int dim>
 class ForcingFunction : public Function<dim>
 {
 public:
@@ -19,13 +29,25 @@ public:
   {
     const double x = p[0];
     const double y = p[1];
+    const double z = p[2];
     
-    // FORMULA CORRETTA (metodo MMS)
-    const double term_diff_react = (20.0 * M_PI * M_PI + 2.0) * std::cos(2.0 * M_PI * x) * std::cos(4.0 * M_PI * y);
-    const double term_adv_x = -2.0 * M_PI * std::sin(2.0 * M_PI * x) * std::cos(4.0 * M_PI * y);
-    const double term_adv_y = -4.0 * M_PI * std::cos(2.0 * M_PI * x) * std::sin(4.0 * M_PI * y);
+    const double sx = std::sin(M_PI * x);
+    const double sy = std::sin(M_PI * y);
+    const double sz = std::sin(M_PI * z);
     
-    return term_diff_react + term_adv_x + term_adv_y;
+    const double cx = std::cos(M_PI * x);
+    const double cy = std::cos(M_PI * y);
+    const double cz = std::cos(M_PI * z);
+
+    const double u_val = sx * sy * sz;
+
+    const double term_diff_react = (3.0 * M_PI * M_PI + 1.0) * u_val;
+
+    const double term_adv_x = M_PI * cx * sy * sz;
+    const double term_adv_y = M_PI * sx * cy * sz;
+    const double term_adv_z = M_PI * sx * sy * cz;
+    
+    return term_diff_react + term_adv_x + term_adv_y + term_adv_z;
   }
 };
 
@@ -61,20 +83,23 @@ int main (int argc, char *argv[])
         const bool enable_multigrid = (argc > 3) ? (std::strcmp(argv[3], "-mg") == 0) : false; 
         const unsigned int degree_finite_element = (argc > 4) ? std::stoi(argv[4]) : 2; 
 
-        const unsigned int dimension = 2;
+        const unsigned int dimension = 3;
 
-        const std::vector<double> beta_components = {1.0, 1.0};
+        const std::vector<double> beta_components = {1.0, 1.0, 1.0};
         
         const auto mu      = std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0);
         const auto beta    = std::make_shared<Functions::ConstantFunction<dimension, double>>(beta_components);
-        const auto gamma   = std::make_shared<Functions::ConstantFunction<dimension, double>>(2.0);
+        const auto gamma   = std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0);
         const auto forcing = std::make_shared<ForcingFunction<dimension>>();
         const auto h       = std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0);
         const auto g       = std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0);
+
+        // Validation -> exact solution 
+        const auto exact_solution = std::make_shared<ExactSolution<dimension>>();
         
-        const std::set<types::boundary_id> dirichlet_ids = {};
+        const std::set<types::boundary_id> dirichlet_ids = {0, 1, 2, 3, 4, 5};
         
-        const std::set<types::boundary_id> neumann_ids = {0, 1, 2, 3};
+        const std::set<types::boundary_id> neumann_ids = {};
 
         auto run_solver_for_degree = [&](auto degree_tag)
           {
@@ -84,12 +109,12 @@ int main (int argc, char *argv[])
                 MatrixFreeSolverMG<dimension, p, double> solver(
                     mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, mesh_refinement_level
                 );
-                solver.run(profiling_run);
+                solver.run(profiling_run, exact_solution);
             } else {
                 MatrixFreeSolver<dimension, p, double> solver(
                     mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, mesh_refinement_level
                 );
-                solver.run(profiling_run);
+                solver.run(profiling_run, exact_solution);
             }
           };
 

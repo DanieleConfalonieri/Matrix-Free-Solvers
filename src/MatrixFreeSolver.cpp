@@ -384,35 +384,51 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
  * @brief Outputs the results to VTU files.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
-void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned int cycle)
+void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned int cycle, 
+                                                                  const std::shared_ptr<Function<dim, NumberType>> exact_solution)
 {
   Timer time;
-  pcout << "Outputting results..." << std::endl;
+  pcout << "Outputting results with exact solution comparison..." << std::endl;
   {
     DataOut<dim> data_out;
-
-    // Ensure ghost values are present for output
     solution.update_ghost_values();
-    
     data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(solution, "solution");
+
+    // Add the numerical solution to the output
+    data_out.add_data_vector(solution, "numerical_solution");
+
+    if (exact_solution) 
+    {
+        // Distributed vector to hold the exact solution at DoFs
+        VectorType exact_solution_vector;
+        system_matrix.initialize_dof_vector(exact_solution_vector);
+        
+        // Interpolate the exact solution at DoFs
+        VectorTools::interpolate(dof_handler, *exact_solution, exact_solution_vector);
+        exact_solution_vector.update_ghost_values();
+        data_out.add_data_vector(exact_solution_vector, "exact_solution");
+
+        // Compute the error vector (numerical - exact)
+        VectorType error_vector;
+        system_matrix.initialize_dof_vector(error_vector);
+        error_vector = solution;
+        error_vector -= exact_solution_vector; // Ora error_vector contiene (u_h - u_ex)
+        error_vector.update_ghost_values();
+        data_out.add_data_vector(error_vector, "error_nodal");
+    }
+
     data_out.build_patches(mapping);
 
-    // Set flags for efficient I/O 
-    //DataOutBase::VtkFlags vtk_flags;
-    //vtk_flags.compression_level = DataOutBase::VtkFlags::best_speed;
-    //data_out.set_flags(vtk_flags);
-    
     data_out.write_vtu_with_pvtu_record(
       "./",
       "solution",
       cycle,
       MPI_COMM_WORLD,
-      2 // Number of digits in filename
+      2
     );
   }
   cumulative_time += time.wall_time();
-  time_details << "Output results            (CPU/wall) " << time.cpu_time()
+  time_details << "Output results (incl. exact) (CPU/wall) " << time.cpu_time()
                << "s/" << time.wall_time() << 's' << std::endl;
 }
 
@@ -420,14 +436,14 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
  * @brief High-level function to run the simulation.
  */
 template <int dim, int fe_degree, std::floating_point NumberType>
-void MatrixFreeSolver<dim, fe_degree, NumberType>::run(const bool profiling_run)
+void MatrixFreeSolver<dim, fe_degree, NumberType>::run(const bool profiling_run, const std::shared_ptr<Function<dim, NumberType>> exact_solution)
 {
   pcout << "Running MatrixFreeSolver..." << std::endl;
   setup_system();
   assemble_rhs();
   solve();
   if(!profiling_run)
-    output_results(0);
+    output_results(0, exact_solution);
 }
 
 // Explicit template instantiations

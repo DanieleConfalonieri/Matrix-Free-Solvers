@@ -89,8 +89,10 @@ public:
 
     /**
      * @brief Run the end-to-end simulation: setup, assemble, solve, output.
+     * @param profiling_run If true, enables detailed timing output for profiling.
+     * @param exact_solution Optional shared pointer to an exact solution function for validation and output.
      */
-    void run(const bool profiling_run = false);
+    void run(const bool profiling_run = false, const std::shared_ptr<dealii::Function<dim, NumberType>> exact_solution = nullptr);
 
 private:
     /**
@@ -111,8 +113,9 @@ private:
     /**
      * @brief Write solution output (VTU) for visualization.
      * @param cycle The current cycle index (useful for time-stepping/adaptivity).
+     * @param exact_solution Optional pointer to an exact solution function for error computation and output.
      */
-    void output_results(const unsigned int cycle);
+    void output_results(const unsigned int cycle, const std::shared_ptr<dealii::Function<dim, NumberType>> exact_solution = nullptr);
 
 #ifdef DEAL_II_WITH_P4EST
     dealii::parallel::distributed::Triangulation<dim> triangulation{MPI_COMM_WORLD};

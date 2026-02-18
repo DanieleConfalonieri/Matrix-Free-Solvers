@@ -87,8 +87,10 @@ public:
     /**
      * @brief Executes the simulation workflow.
      * Calls setup, assembly, solve, and output methods in sequence.
+     * @param profiling_run If true, enables detailed timing output for profiling purposes.
+     * @param exact_solution Optional shared pointer to an exact solution function for validation and output.
      */
-    void run(const bool profiling_run = false);
+    void run(const bool profiling_run = false, const std::shared_ptr<dealii::Function<dim, NumberType>> exact_solution = nullptr);
 
 private:
     /**
@@ -119,8 +121,9 @@ private:
     /**
      * @brief Outputs the solution in VTU/Vtu format for Paraview.
      * @param cycle Current cycle index (useful for adaptive refinement or time-stepping).
+     * @param exact_solution Shared pointer to the exact solution function for validation.
      */
-    void output_results(const unsigned int cycle);
+    void output_results(const unsigned int cycle, const std::shared_ptr<dealii::Function<dim, NumberType>> exact_solution = nullptr);
 
     // Mesh & FE Data
 #ifdef DEAL_II_WITH_P4EST
