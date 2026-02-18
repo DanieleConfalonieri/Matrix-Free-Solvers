@@ -325,7 +325,8 @@ void DiffusionReactionParallel::solve()
   
   // Calcoliamo il throughput in MDoFs/s, tenendo conto del numero totale di DoFs e del tempo per iterazione
   const double throughput_mdofs = dof_handler.n_dofs() / time_per_iter / 1e6;// MDoFs/s
-
+  
+  pcout << "   Solve linear system       (CPU/wall) " << timer.cpu_time() << " s/" << elapsed_wall_time << 's' << std::endl;
   pcout << "   Solved in " << n_iter << " iterations." << std::endl;
   pcout << "   Time per iter:      " << time_per_iter << " s" << std::endl;
   pcout << "   Throughput:         " << throughput_mdofs << " MDoFs/s" << std::endl;

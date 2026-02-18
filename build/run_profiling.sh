@@ -39,12 +39,12 @@ for n_cores in $CORES_LIST; do
             ITERS=$(echo "$OUTPUT" | grep -oP 'Solved in\s*\K\d+')
             TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
             THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+\s*MDoFs/s')
-            OUTPUT_RES_CPU=$(echo "$OUTPUT" | grep -oP 'Output')
-            OUTPUT_RES_WALL=$(echo "$OUTPUT" | grep -oP 'results\s*\(CPU\/wall\)\s*[0-9.]+s\/\K[0-9.]+')
+            #OUTPUT_RES_CPU=$(echo "$OUTPUT" | grep -oP 'Output')
+            #OUTPUT_RES_WALL=$(echo "$OUTPUT" | grep -oP 'results\s*\(CPU\/wall\)\s*[0-9.]+s\/\K[0-9.]+')
 
             if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
                 # Aggiunta n_cores come primo campo
-                echo "$n_cores,MatrixFree,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,$RHS_CPU,$RHS_WALL,$LINEAR_SYSTEM_CPU,$LINEAR_SYSTEM_WALL,$ITERS,$TIME_ITER,$THROUGHPUT,$OUTPUT_RES_CPU,$OUTPUT_RES_WALL" >> $CSV_FILE
+                echo "$n_cores,MatrixFree,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,$RHS_CPU,$RHS_WALL,$LINEAR_SYSTEM_CPU,$LINEAR_SYSTEM_WALL,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
             else
                 echo "   [!] Fallito o OOM per Cores=$n_cores, p=$p, Level=$L"
             fi
@@ -72,7 +72,8 @@ for n_cores in $CORES_LIST; do
             DOFS=$(echo "$OUTPUT" | grep -oP 'Number of degrees of freedom:\s*\K\d+')
             DOFS_CELL=$(echo "$OUTPUT" | grep -oP 'DoFs per cell\s*=\s\K[0-9]+')
             QPOINTS_CELL=$(echo "$OUTPUT" | grep -oP 'Quadrature points per cell\s*=\s\K[0-9]+')
-            LINEAR_SYSTEM=$(echo "$OUTPUT" | grep -oP 'Solve linear system\s*\(CPU\/wall\)\s*\K[0-9.]+')
+            LINEAR_SYSTEM_CPU=$(echo "$OUTPUT" | grep -oP 'Solve linear system\s*\(CPU\/wall\)\s\K[0-9.]+')
+            LINEAR_SYSTEM_WALL=$(echo "$OUTPUT" | grep -oP 'Solve linear system\s*\(CPU\/wall\)\s[0-9.]+\s*s\/\K[0-9.]+')
             ITERS=$(echo "$OUTPUT" | grep -oP 'Solved in\s*\K\d+')
             TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
             THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+\s*MDoFs/s')
@@ -81,7 +82,7 @@ for n_cores in $CORES_LIST; do
 
             if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
                 # Aggiunta n_cores all'inizio, nota le virgole vuote per mantenere l'allineamento con l'header se necessario
-                echo "$n_cores,MatrixBased,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,,,,$LINEAR_SYSTEM,,$ITERS,$TIME_ITER,$THROUGHPUT,$ASSEMBLE_CPU,$ASSEMBLE_WALL" >> $CSV_FILE
+                echo "$n_cores,MatrixBased,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,$ASSEMBLE_CPU,$ASSEMBLE_WALL,$LINEAR_SYSTEM_CPU,$LINEAR_SYSTEM_WALL,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
             else
                 echo "   [!] Fallito o OOM per Cores=$n_cores, p=$p, Level=$L"
             fi
