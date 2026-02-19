@@ -8,6 +8,9 @@
 #include "MatrixFreeSolverMG.hpp"
 #include <cstring>
 #include <cmath>
+#include <deal.II/base/convergence_table.h>
+#include <deal.II/numerics/vector_tools.h>
+#include <fstream>
 
 using namespace dealii;
 
@@ -18,6 +21,20 @@ public:
   virtual double value(const Point<dim> &p, const unsigned int /*component*/ = 0) const override
   {
     return std::sin(M_PI * p[0]) * std::sin(M_PI * p[1]) * std::sin(M_PI * p[2]);
+  }
+
+  virtual Tensor<1, dim> gradient(const Point<dim> &p, const unsigned int = 0) const override
+  {
+    Tensor<1, dim> grad;
+    const double px = M_PI * p[0];
+    const double py = M_PI * p[1];
+    const double pz = M_PI * p[2];
+
+    grad[0] = M_PI * std::cos(px) * std::sin(py) * std::sin(pz);
+    grad[1] = M_PI * std::sin(px) * std::cos(py) * std::sin(pz);
+    grad[2] = M_PI * std::sin(px) * std::sin(py) * std::cos(pz);
+
+    return grad;
   }
 };
 
@@ -52,7 +69,7 @@ public:
 };
 
 /**
- * @brief Run a single predefined test: 3D cube, diffusion, constant source.
+ * @brief Run a single EOC test: 3D cube, diffusion, constant source.
  *
  * Minimal entry point: initializes MPI and runs one solver instance.
  * @return 0 on success, 1 on exception.
@@ -61,6 +78,8 @@ int main (int argc, char *argv[])
 {
         // Initialize MPI. The '1' argument limits console output to valid ASCII if needed.
         Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, 1);
+
+        int my_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
 
         ConditionalOStream pcout(std::cout,
           (Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0));
@@ -104,17 +123,60 @@ int main (int argc, char *argv[])
         auto run_solver_for_degree = [&](auto degree_tag)
           {
             constexpr int p = decltype(degree_tag)::value;
-    
-            if(enable_multigrid) {
+
+            ConvergenceTable table;
+            std::ofstream convergence_file;
+            if(my_rank == 0){
+              convergence_file.open("convergence.csv");
+              convergence_file << "h,eL2,eH1\n";
+            }
+
+            unsigned int start_level = 2; 
+            unsigned int end_level = mesh_refinement_level < start_level ? start_level : mesh_refinement_level;
+
+            for (unsigned int level = start_level; level <= end_level; ++level) {
+              pcout << "Running EOC analysys for p=" << p << " and mesh refinement level = " << level << std::endl;
+
+              double error_L2 = 0.0;
+              double error_H1 = 0.0;
+
+              if(enable_multigrid) {
                 MatrixFreeSolverMG<dimension, p, double> solver(
-                    mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, mesh_refinement_level
+                    mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, level
                 );
-                solver.run(profiling_run, exact_solution);
-            } else {
+                const bool profiling = (level == end_level) ? profiling_run : true; // Output written only for the last level if requested
+                solver.run(profiling, exact_solution);
+                error_L2 = solver.compute_error(VectorTools::L2_norm, *exact_solution);
+                error_H1 = solver.compute_error(VectorTools::H1_norm, *exact_solution);
+              }  
+              else {
                 MatrixFreeSolver<dimension, p, double> solver(
-                    mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, mesh_refinement_level
+                    mu, beta, gamma, forcing, h, g, dirichlet_ids, neumann_ids, level
                 );
-                solver.run(profiling_run, exact_solution);
+                const bool profiling = (level == end_level) ? profiling_run : true; // Output written only for the last level if requested
+                solver.run(profiling, exact_solution);
+                error_L2 = solver.compute_error(VectorTools::L2_norm, *exact_solution);
+                error_H1 = solver.compute_error(VectorTools::H1_norm, *exact_solution);
+              }
+
+              // h = 1/2^L (unitary hypercube)
+              const double h = 1.0 / std::pow(2.0, level);
+              table.add_value("h", h);
+              table.add_value("L2", error_L2);
+              table.add_value("H1", error_H1);
+              if (my_rank == 0) {
+                convergence_file << h << "," << error_L2 << "," << error_H1 << "\n";
+              }
+            }
+            if (my_rank == 0) {
+              convergence_file.close();
+              table.evaluate_all_convergence_rates(ConvergenceTable::reduction_rate_log2);
+              table.set_scientific("L2", true);
+              table.set_scientific("H1", true);
+
+              pcout << "\n=== Convergence Table ===\n";
+              table.write_text(std::cout);
+              pcout << "=========================\n";
             }
           };
 

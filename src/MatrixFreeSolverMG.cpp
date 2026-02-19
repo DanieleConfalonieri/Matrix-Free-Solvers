@@ -525,6 +525,29 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
 }
 
 template <int dim, int fe_degree, std::floating_point NumberType>
+double MatrixFreeSolverMG<dim, fe_degree, NumberType>::compute_error(const VectorTools::NormType &norm_type,const Function<dim, NumberType> &exact_solution) const
+{ 
+
+  auto &non_const_sol = const_cast<VectorType &>(solution);
+  non_const_sol.update_ghost_values();
+  
+  const QGauss<dim> quadrature_error(fe.degree + 2); 
+  Vector<double> error_per_cell(triangulation.n_active_cells());
+  
+  VectorTools::integrate_difference(mapping,
+                                    dof_handler,
+                                    solution,
+                                    exact_solution,
+                                    error_per_cell,
+                                    quadrature_error,
+                                    norm_type);
+
+  const double error = VectorTools::compute_global_error(triangulation, error_per_cell, norm_type);
+
+  return error;
+}
+
+template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::run(const bool profiling_run, const std::shared_ptr<Function<dim, NumberType>> exact_solution)
 {
   pcout << "Running MatrixFreeSolverMG..." << std::endl;
