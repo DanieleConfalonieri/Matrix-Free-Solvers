@@ -319,7 +319,7 @@ void DiffusionReactionParallel::solve()
     constraints.distribute(solution);
   }
 
-  // 3. Stesse Metriche di Performance del Matrix-Free
+  // Stesse Metriche di Performance del Matrix-Free
   const double elapsed_wall_time = timer.wall_time();
   const double time_per_iter = elapsed_wall_time / n_iter;
   
@@ -333,29 +333,41 @@ void DiffusionReactionParallel::solve()
   pcout << "===============================================" << std::endl;
 }
 
-void DiffusionReactionParallel::output() const
+void DiffusionReactionParallel::output(const std::shared_ptr<const Function<dim>> &exact_solution) const
 {
   pcout << "===============================================" << std::endl;
   pcout << "Outputting results..." << std::endl;
 
-  // 1. Estrazione dei DoF "fantasma" (locally relevant)
+  // Locally relevant DoFs for parallel output
   const IndexSet locally_relevant_dofs =
       DoFTools::extract_locally_relevant_dofs(dof_handler);
 
-  // In Trilinos, i ghost si gestiscono creando un vettore ad hoc
+  // Ghost vector 
   TrilinosWrappers::MPI::Vector solution_ghost(locally_owned_dofs,
                                                locally_relevant_dofs,
                                                MPI_COMM_WORLD);
+  solution_ghost = solution; // Solution scatter
 
-  // L'assegnazione fa scattare la comunicazione MPI (scatter)
-  solution_ghost = solution;
-
-  // 2. Preparazione dell'output (Sintassi moderna uniformata)
   DataOut<dim> data_out;
   data_out.attach_dof_handler(dof_handler);
   data_out.add_data_vector(solution_ghost, "solution");
 
-  // Aggiungiamo il partizionamento MPI per la visualizzazione in Paraview
+  if (exact_solution)
+  {
+      TrilinosWrappers::MPI::Vector exact_distributed(locally_owned_dofs, MPI_COMM_WORLD);
+      VectorTools::interpolate(dof_handler, *exact_solution, exact_distributed);
+
+      TrilinosWrappers::MPI::Vector exact_ghost(locally_owned_dofs, locally_relevant_dofs, MPI_COMM_WORLD);
+      exact_ghost = exact_distributed;
+
+      TrilinosWrappers::MPI::Vector error_ghost(locally_owned_dofs, locally_relevant_dofs, MPI_COMM_WORLD);
+      error_ghost = solution_ghost; 
+      error_ghost -= exact_ghost;   
+
+      data_out.add_data_vector(exact_ghost, "exact_solution");
+      data_out.add_data_vector(error_ghost, "error_nodal");
+  }
+
   std::vector<unsigned int> partition_int(mesh.n_active_cells());
   GridTools::get_subdomain_association(mesh, partition_int);
   const Vector<double> partitioning(partition_int.begin(), partition_int.end());
@@ -363,22 +375,19 @@ void DiffusionReactionParallel::output() const
 
   data_out.build_patches();
 
-  // 3. Salvataggio su file
-  // Rimosso mesh_file_name: usiamo un nome standard e il livello di raffinamento
   const std::string output_file_name = "solution_matrix_based";
 
   data_out.write_vtu_with_pvtu_record(
     "./",
     output_file_name,
-    mesh_refinement_level, // Usiamo il livello di raffinamento come ciclo/indice
+    mesh_refinement_level,
     MPI_COMM_WORLD,
-    2 // Numero di cifre nel nome file (es. solution_matrix_based_03.vtu)
+    2
   );
 
   pcout << "Output written to " << output_file_name << "_" 
         << std::setfill('0') << std::setw(2) << mesh_refinement_level 
         << ".pvtu" << std::endl;
-
   pcout << "===============================================" << std::endl;
 }
 

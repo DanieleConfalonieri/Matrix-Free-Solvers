@@ -6,6 +6,16 @@
 using namespace dealii;
 
 template <int dim>
+class ExactSolution : public Function<dim>
+{
+public:
+  virtual double value(const Point<dim> &p, const unsigned int /*component*/ = 0) const override
+  {
+    return std::sin(M_PI * p[0]) * std::sin(M_PI * p[1]) * std::sin(M_PI * p[2]);
+  }
+};
+
+template <int dim>
 class ForcingFunction : public Function<dim>
 {
 public:
@@ -15,11 +25,23 @@ public:
     const double y = p[1];
     const double z = p[2];
     
-    const double term_diff = (2.0 * M_PI * M_PI - 1)  * std::sin(M_PI * x) * std::sin(M_PI * y) * std::exp(z);
-    const double term_adv = M_PI * std::cos(M_PI * x) * std::sin(M_PI * y) * std::exp(z) + M_PI * std::sin(M_PI * x) * std::cos(M_PI * y) * std::exp(z) + std::sin(M_PI * x) * std::sin(M_PI * y) * std::exp(z);
-    const double term_rect = std::sin(M_PI * x) * std::sin(M_PI * y) * std::exp(z);
+    const double sx = std::sin(M_PI * x);
+    const double sy = std::sin(M_PI * y);
+    const double sz = std::sin(M_PI * z);
     
-    return term_diff + term_adv + term_rect;
+    const double cx = std::cos(M_PI * x);
+    const double cy = std::cos(M_PI * y);
+    const double cz = std::cos(M_PI * z);
+
+    const double u_val = sx * sy * sz;
+
+    const double term_diff_react = (3.0 * M_PI * M_PI + 1.0) * u_val;
+
+    const double term_adv_x = M_PI * cx * sy * sz;
+    const double term_adv_y = M_PI * sx * cy * sz;
+    const double term_adv_z = M_PI * sx * sy * cz;
+    
+    return term_diff_react + term_adv_x + term_adv_y + term_adv_z;
   }
 };
 
@@ -63,6 +85,9 @@ int main(int argc, char *argv[])
       std::make_shared<Functions::ConstantFunction<dim>>(0.0),             // g (Dirichlet)
       enable_multigrid);
 
+  // Validation -> exact solution 
+  const auto exact_solution = std::make_shared<ExactSolution<dim>>();
+
   problem.set_dirichlet_ids({0,1,2,3,4,5});
   problem.set_neumann_ids({});
 
@@ -71,7 +96,7 @@ int main(int argc, char *argv[])
   problem.solve();
   
   if(!profiling_run)
-    problem.output();
+    problem.output(exact_solution);
 
   return 0;
 }

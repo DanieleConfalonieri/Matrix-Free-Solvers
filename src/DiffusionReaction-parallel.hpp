@@ -104,7 +104,7 @@ public:
 
   // Output.
   void
-  output() const;
+  output(const std::shared_ptr<const Function<dim>> &exact_solution = nullptr) const;
 
   // Compute the error against a given exact solution.
   double
