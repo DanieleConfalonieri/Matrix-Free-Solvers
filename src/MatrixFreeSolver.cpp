@@ -320,16 +320,23 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
     JacobiPreconditioner jacobi_preconditioner{inverse_diagonal->get_vector()};
 
     // Advection detection: β can be non-constant (evaluated at domain center).
-    Point<dim> sample_point;
-    for (unsigned int d = 0; d < dim; ++d)
-      sample_point[d] = 0.5;
-    bool is_advection_zero = true;
-    for (unsigned int d = 0; d < dim; ++d) {
-      if (std::abs(beta_function->value(sample_point, d)) > 1e-12) {
-        is_advection_zero = false;
-        break;
-      }
+    bool is_advection_zero = false;
+
+    if (std::dynamic_pointer_cast<const Functions::ZeroFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
     }
+    else if (auto const_func = std::dynamic_pointer_cast<const Functions::ConstantFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
+        for (unsigned int d = 0; d < dim; ++d) {
+            if (std::abs(const_func->value(Point<dim>(), d)) > 1e-12) {
+                is_advection_zero = false;
+                break;
+            }
+        }
+    }
+    
     // Solver configuration
     SolverControl solver_control (10000, 1e-12);
     pcout << "  Solver tolerance: " << solver_control.tolerance() << std::endl;
@@ -432,6 +439,28 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::output_results(const unsigned
                << "s/" << time.wall_time() << 's' << std::endl;
 }
 
+template <int dim, int fe_degree, std::floating_point NumberType>
+double MatrixFreeSolver<dim, fe_degree, NumberType>::compute_error(const VectorTools::NormType &norm_type,const Function<dim, NumberType> &exact_solution) const
+{ 
+  auto &non_const_sol = const_cast<VectorType &>(solution);
+  non_const_sol.update_ghost_values();
+
+  const QGauss<dim> quadrature_error(fe.degree + 2); 
+  Vector<double> error_per_cell(triangulation.n_active_cells());
+  
+  VectorTools::integrate_difference(mapping,
+                                    dof_handler,
+                                    solution,
+                                    exact_solution,
+                                    error_per_cell,
+                                    quadrature_error,
+                                    norm_type);
+
+  const double error = VectorTools::compute_global_error(triangulation, error_per_cell, norm_type);
+
+  return error;
+}
+
 /**
  * @brief High-level function to run the simulation.
  */
@@ -446,7 +475,19 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::run(const bool profiling_run,
     output_results(0, exact_solution);
 }
 
-// Explicit template instantiations
+// Explicit template instantiationstemplate class MatrixFreeSolver<1, 1, double>;
+template class MatrixFreeSolver<1, 2, double>;
+template class MatrixFreeSolver<1, 3, double>;
+template class MatrixFreeSolver<1, 4, double>;
+template class MatrixFreeSolver<1, 5, double>;
+template class MatrixFreeSolver<1, 6, double>;
+template class MatrixFreeSolver<1, 7, double>;
+template class MatrixFreeSolver<1, 8, double>;
+template class MatrixFreeSolver<1, 9, double>;
+template class MatrixFreeSolver<1, 10, double>;
+template class MatrixFreeSolver<1, 11, double>;
+template class MatrixFreeSolver<1, 12, double>;
+
 template class MatrixFreeSolver<2, 1, double>;
 template class MatrixFreeSolver<2, 2, double>;
 template class MatrixFreeSolver<2, 3, double>;

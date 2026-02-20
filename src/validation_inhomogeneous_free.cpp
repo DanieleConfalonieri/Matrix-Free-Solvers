@@ -17,23 +17,15 @@ using namespace dealii;
 template <int dim>
 class ExactSolution : public Function<dim>
 {
-public:
-  virtual double value(const Point<dim> &p, const unsigned int /*component*/ = 0) const override
-  {
-    return std::sin(M_PI * p[0]) * std::sin(M_PI * p[1]) * std::sin(M_PI * p[2]);
+    public:
+  virtual double value(const Point<dim> &p, const unsigned int = 0) const override {
+    return std::exp(p[0] + p[1] + p[2]);
   }
 
-  virtual Tensor<1, dim> gradient(const Point<dim> &p, const unsigned int = 0) const override
-  {
+  virtual Tensor<1, dim> gradient(const Point<dim> &p, const unsigned int = 0) const override {
+    const double val = std::exp(p[0] + p[1] + p[2]);
     Tensor<1, dim> grad;
-    const double px = M_PI * p[0];
-    const double py = M_PI * p[1];
-    const double pz = M_PI * p[2];
-
-    grad[0] = M_PI * std::cos(px) * std::sin(py) * std::sin(pz);
-    grad[1] = M_PI * std::sin(px) * std::cos(py) * std::sin(pz);
-    grad[2] = M_PI * std::sin(px) * std::sin(py) * std::cos(pz);
-
+    grad[0] = val; grad[1] = val; grad[2] = val;
     return grad;
   }
 };
@@ -41,30 +33,33 @@ public:
 template <int dim>
 class ForcingFunction : public Function<dim>
 {
+    public:
+  virtual double value(const Point<dim> &p, const unsigned int = 0) const override {
+    return -2.0 * std::exp(p[0] + p[1] + p[2]);
+  }
+};
+
+template <int dim>
+class NeumannFunction : public Function<dim>
+{
 public:
-  virtual double value(const Point<dim> &p, const unsigned int /*component*/ = 0) const override
-  {
-    const double x = p[0];
-    const double y = p[1];
-    const double z = p[2];
-    
-    const double sx = std::sin(M_PI * x);
-    const double sy = std::sin(M_PI * y);
-    const double sz = std::sin(M_PI * z);
-    
-    const double cx = std::cos(M_PI * x);
-    const double cy = std::cos(M_PI * y);
-    const double cz = std::cos(M_PI * z);
+  virtual double value(const Point<dim> &p, const unsigned int = 0) const override {
+    const double u_val = std::exp(p[0] + p[1] + p[2]);
+    Tensor<1, dim> grad;
+    grad[0] = u_val; grad[1] = u_val; grad[2] = u_val;
 
-    const double u_val = sx * sy * sz;
-
-    const double term_diff_react = (3.0 * M_PI * M_PI + 1.0) * u_val;
-
-    const double term_adv_x = M_PI * cx * sy * sz;
-    const double term_adv_y = M_PI * sx * cy * sz;
-    const double term_adv_z = M_PI * sx * sy * cz;
+    Tensor<1, dim> normal;
+    const double tol = 1e-7;
+    if      (std::abs(p[0] - 0.0) < tol) normal[0] = -1.0;
+    else if (std::abs(p[0] - 1.0) < tol) normal[0] =  1.0;
     
-    return term_diff_react + term_adv_x + term_adv_y + term_adv_z;
+    if      (std::abs(p[1] - 0.0) < tol) normal[1] = -1.0;
+    else if (std::abs(p[1] - 1.0) < tol) normal[1] =  1.0;
+    
+    if      (std::abs(p[2] - 0.0) < tol) normal[2] = -1.0;
+    else if (std::abs(p[2] - 1.0) < tol) normal[2] =  1.0;
+
+    return 1.0 * (grad * normal); 
   }
 };
 
@@ -104,21 +99,21 @@ int main (int argc, char *argv[])
 
         const unsigned int dimension = 3;
 
-        const std::vector<double> beta_components = {1.0, 1.0, 1.0};
+        const std::vector<double> beta_components = {0.0, 0.0, 0.0};
         
         const auto mu      = std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0);
         const auto beta    = std::make_shared<Functions::ConstantFunction<dimension, double>>(beta_components);
         const auto gamma   = std::make_shared<Functions::ConstantFunction<dimension, double>>(1.0);
         const auto forcing = std::make_shared<ForcingFunction<dimension>>();
-        const auto h       = std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0);
-        const auto g       = std::make_shared<Functions::ConstantFunction<dimension, double>>(0.0);
+        const auto h       = std::make_shared<NeumannFunction<dimension>>();
+        const auto g       = std::make_shared<ExactSolution<dimension>>();
 
         // Validation -> exact solution 
         const auto exact_solution = std::make_shared<ExactSolution<dimension>>();
         
-        const std::set<types::boundary_id> dirichlet_ids = {0, 1, 2, 3, 4, 5};
+        const std::set<types::boundary_id> dirichlet_ids = {0, 2, 4};
         
-        const std::set<types::boundary_id> neumann_ids = {};
+        const std::set<types::boundary_id> neumann_ids = {1, 3, 5};
 
         auto run_solver_for_degree = [&](auto degree_tag)
           {

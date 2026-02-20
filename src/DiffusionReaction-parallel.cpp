@@ -397,15 +397,19 @@ DiffusionReactionParallel::compute_error(
     const Function<dim> &exact_solution) const
 {
   const QGauss<dim> quadrature_error(fe_degree + 2);
-
-  // Usiamo la mappatura nativa per elementi tensoriali 
   MappingQ<dim> mapping(1);
+
+  const IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
+  
+  TrilinosWrappers::MPI::Vector solution_ghost(locally_owned_dofs, locally_relevant_dofs, MPI_COMM_WORLD);
+  
+  solution_ghost = solution; 
 
   Vector<double> error_per_cell(mesh.n_active_cells());
   
   VectorTools::integrate_difference(mapping,
                                     dof_handler,
-                                    solution,
+                                    solution_ghost, // Passiamo il vettore con i ghost!
                                     exact_solution,
                                     error_per_cell,
                                     quadrature_error,

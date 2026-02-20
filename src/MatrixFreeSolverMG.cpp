@@ -304,15 +304,21 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
     system_matrix.compute_diagonal();
 
     // Advection detection: β can be non-constant (evaluated at domain center).
-    Point<dim> sample_point;
-    for (unsigned int d = 0; d < dim; ++d)
-      sample_point[d] = 0.5;
-    bool is_advection_zero = true;
-    for (unsigned int d = 0; d < dim; ++d) {
-      if (std::abs(beta_function->value(sample_point, d)) > 1e-12) {
-        is_advection_zero = false;
-        break;
-      }
+    bool is_advection_zero = false;
+
+    if (std::dynamic_pointer_cast<const Functions::ZeroFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
+    }
+    else if (auto const_func = std::dynamic_pointer_cast<const Functions::ConstantFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
+        for (unsigned int d = 0; d < dim; ++d) {
+            if (std::abs(const_func->value(Point<dim>(), d)) > 1e-12) {
+                is_advection_zero = false;
+                break;
+            }
+        }
     }
 
     if (is_advection_zero)
@@ -525,6 +531,29 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::output_results(const unsign
 }
 
 template <int dim, int fe_degree, std::floating_point NumberType>
+double MatrixFreeSolverMG<dim, fe_degree, NumberType>::compute_error(const VectorTools::NormType &norm_type,const Function<dim, NumberType> &exact_solution) const
+{ 
+
+  auto &non_const_sol = const_cast<VectorType &>(solution);
+  non_const_sol.update_ghost_values();
+  
+  const QGauss<dim> quadrature_error(fe.degree + 2); 
+  Vector<double> error_per_cell(triangulation.n_active_cells());
+  
+  VectorTools::integrate_difference(mapping,
+                                    dof_handler,
+                                    solution,
+                                    exact_solution,
+                                    error_per_cell,
+                                    quadrature_error,
+                                    norm_type);
+
+  const double error = VectorTools::compute_global_error(triangulation, error_per_cell, norm_type);
+
+  return error;
+}
+
+template <int dim, int fe_degree, std::floating_point NumberType>
 void MatrixFreeSolverMG<dim, fe_degree, NumberType>::run(const bool profiling_run, const std::shared_ptr<Function<dim, NumberType>> exact_solution)
 {
   pcout << "Running MatrixFreeSolverMG..." << std::endl;
@@ -536,6 +565,19 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::run(const bool profiling_ru
 }
 
 // Explicit template instantiations
+template class MatrixFreeSolverMG<1, 1, double>;
+template class MatrixFreeSolverMG<1, 2, double>;
+template class MatrixFreeSolverMG<1, 3, double>;
+template class MatrixFreeSolverMG<1, 4, double>;
+template class MatrixFreeSolverMG<1, 5, double>;
+template class MatrixFreeSolverMG<1, 6, double>;
+template class MatrixFreeSolverMG<1, 7, double>;
+template class MatrixFreeSolverMG<1, 8, double>;
+template class MatrixFreeSolverMG<1, 9, double>;
+template class MatrixFreeSolverMG<1, 10, double>;
+template class MatrixFreeSolverMG<1, 11, double>;
+template class MatrixFreeSolverMG<1, 12, double>;
+
 template class MatrixFreeSolverMG<2, 1, double>;
 template class MatrixFreeSolverMG<2, 2, double>;
 template class MatrixFreeSolverMG<2, 3, double>;

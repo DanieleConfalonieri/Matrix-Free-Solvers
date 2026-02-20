@@ -36,6 +36,8 @@
 #include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
+#include <deal.II/numerics/vector_tools.h>
+
 
 /**
  * @brief Main driver class for the Matrix-Free ADR Solver.
@@ -91,6 +93,11 @@ public:
      * @param exact_solution Optional shared pointer to an exact solution function for validation and output.
      */
     void run(const bool profiling_run = false, const std::shared_ptr<dealii::Function<dim, NumberType>> exact_solution = nullptr);
+
+    /**
+     * @brief Computes the global L2 error between the numerical and exact solution.
+     */
+    double compute_error(const dealii::VectorTools::NormType &norm_type, const dealii::Function<dim, NumberType> &exact_solution) const;
 
 private:
     /**
