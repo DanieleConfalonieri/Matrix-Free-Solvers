@@ -304,15 +304,21 @@ void MatrixFreeSolverMG<dim, fe_degree, NumberType>::solve()
     system_matrix.compute_diagonal();
 
     // Advection detection: β can be non-constant (evaluated at domain center).
-    Point<dim> sample_point;
-    for (unsigned int d = 0; d < dim; ++d)
-      sample_point[d] = 0.5;
-    bool is_advection_zero = true;
-    for (unsigned int d = 0; d < dim; ++d) {
-      if (std::abs(beta_function->value(sample_point, d)) > 1e-12) {
-        is_advection_zero = false;
-        break;
-      }
+    bool is_advection_zero = false;
+
+    if (std::dynamic_pointer_cast<const Functions::ZeroFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
+    }
+    else if (auto const_func = std::dynamic_pointer_cast<const Functions::ConstantFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
+        for (unsigned int d = 0; d < dim; ++d) {
+            if (std::abs(const_func->value(Point<dim>(), d)) > 1e-12) {
+                is_advection_zero = false;
+                break;
+            }
+        }
     }
 
     if (is_advection_zero)

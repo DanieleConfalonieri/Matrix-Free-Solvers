@@ -320,16 +320,23 @@ void MatrixFreeSolver<dim, fe_degree, NumberType>::solve()
     JacobiPreconditioner jacobi_preconditioner{inverse_diagonal->get_vector()};
 
     // Advection detection: β can be non-constant (evaluated at domain center).
-    Point<dim> sample_point;
-    for (unsigned int d = 0; d < dim; ++d)
-      sample_point[d] = 0.5;
-    bool is_advection_zero = true;
-    for (unsigned int d = 0; d < dim; ++d) {
-      if (std::abs(beta_function->value(sample_point, d)) > 1e-12) {
-        is_advection_zero = false;
-        break;
-      }
+    bool is_advection_zero = false;
+
+    if (std::dynamic_pointer_cast<const Functions::ZeroFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
     }
+    else if (auto const_func = std::dynamic_pointer_cast<const Functions::ConstantFunction<dim, NumberType>>(beta_function)) 
+    {
+        is_advection_zero = true;
+        for (unsigned int d = 0; d < dim; ++d) {
+            if (std::abs(const_func->value(Point<dim>(), d)) > 1e-12) {
+                is_advection_zero = false;
+                break;
+            }
+        }
+    }
+    
     // Solver configuration
     SolverControl solver_control (10000, 1e-12);
     pcout << "  Solver tolerance: " << solver_control.tolerance() << std::endl;
