@@ -6,7 +6,7 @@ EXEC_MB="./weak_scaling_based"
 EXEC_CALC_CORES="./calc_core"
 MULTIGRID_OPTION="-mg"
 
-MAX_P=6
+MAX_P=2
 MAX_LEVEL_MF=6
 MAX_LEVEL_MB=6
 DIMENSION=2
@@ -33,7 +33,7 @@ for i in "${!CORES_ARRAY[@]}"; do
     for L in $(seq 6 $MAX_LEVEL_MF); do
         echo "   Executing Matrix-Free (Cores=$n_cores, p=$p, Level=$L)..."
 
-        OUTPUT=$(mpirun --oversubscribe -n "$n_cores" $EXEC_MF 1 $L "$MULTIGRID_OPTION" $p)
+        OUTPUT=$(mpirun -n "$n_cores" $EXEC_MF 1 $L "$MULTIGRID_OPTION" $p)
 
         SETUP_SYSTEM_CPU=$(echo "$OUTPUT" | grep -oP 'Setup matrix-free system\s*\(CPU\/wall\)\s\K[0-9.]+')
         SETUP_SYSTEM_WALL=$(echo "$OUTPUT" | grep -oP 'Setup matrix-free system\s*\(CPU\/wall\)\s[0-9.]+\s*s\/\s*\K[0-9.]+')
@@ -49,7 +49,7 @@ for i in "${!CORES_ARRAY[@]}"; do
         TIME_ITER=$(echo "$OUTPUT" | grep -oP 'Time per iter:\s*\K[0-9.]+')
         THROUGHPUT=$(echo "$OUTPUT" | grep -oP 'Throughput:\s*\K[0-9.]+\s*MDoFs/s')
 
-        if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
+        if [ ! -z "$SETUP_SYSTEM_CPU" ] && [ ! -z "$SETUP_SYSTEM_WALL" ] && [ ! -z "$NUMBER_ELEMENTS" ] && [ ! -z "$DOFS" ] && [ ! -z "$DOFS_CELL" ] && [ ! -z "$QPOINTS_CELL" ] && [ ! -z "$RHS_CPU" ] && [ ! -z "$RHS_WALL" ] && [ ! -z "$LINEAR_SYSTEM_CPU" ] && [ ! -z "$LINEAR_SYSTEM_WALL" ] && [ ! -z "$ITERS" ] && [ ! -z "$TIME_ITER" ] && [ ! -z "$THROUGHPUT" ]; then
             echo "$n_cores,MatrixFree,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,$RHS_CPU,$RHS_WALL,$LINEAR_SYSTEM_CPU,$LINEAR_SYSTEM_WALL,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
         else
             echo "   [!] Fallito o OOM per Cores=$n_cores, p=$p, Level=$L"
@@ -65,7 +65,7 @@ for i in "${!CORES_ARRAY[@]}"; do
     for L in $(seq 6 $MAX_LEVEL_MB); do
         echo "   Executing Matrix-Based (Cores=$n_cores, p=$p, Level=$L)..."
 
-        OUTPUT=$(mpirun --oversubscribe -n "$n_cores" $EXEC_MB 1 $L "$MULTIGRID_OPTION" $p)
+        OUTPUT=$(mpirun -n "$n_cores" $EXEC_MB 1 $L "$MULTIGRID_OPTION" $p)
 
         SETUP_SYSTEM_CPU=$(echo "$OUTPUT" | grep -oP 'Setup system\s*\(CPU\/wall\)\s\K[0-9.]+')
         SETUP_SYSTEM_WALL=$(echo "$OUTPUT" | grep -oP 'Setup system\s*\(CPU\/wall\)\s[0-9.]+\s*s\/\s*\K[0-9.]+')
@@ -81,7 +81,7 @@ for i in "${!CORES_ARRAY[@]}"; do
         ASSEMBLE_CPU=$(echo "$OUTPUT" | grep -oP 'Assembly complete\s*\(CPU\/wall\)\s*\K[0-9.]+')
         ASSEMBLE_WALL=$(echo "$OUTPUT" | grep -oP 'Assembly complete\s*\(CPU\/wall\)\s*[0-9.]+s\/\K[0-9.]+')
 
-        if [ ! -z "$DOFS" ] && [ ! -z "$THROUGHPUT" ]; then
+	    if [ ! -z "$SETUP_SYSTEM_CPU" ] && [ ! -z "$SETUP_SYSTEM_WALL" ] && [ ! -z "$NUMBER_ELEMENTS" ] && [ ! -z "$DOFS" ] && [ ! -z "$DOFS_CELL" ] && [ ! -z "$QPOINTS_CELL" ] && [ ! -z "$ASSEMBLE_CPU" ] && [ ! -z "$ASSEMBLE_WALL" ] && [ ! -z "$LINEAR_SYSTEM_CPU" ] && [ ! -z "$LINEAR_SYSTEM_WALL" ] && [ ! -z "$ITERS" ] && [ ! -z "$TIME_ITER" ] && [ ! -z "$THROUGHPUT" ]; then
             echo "$n_cores,MatrixBased,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,$ASSEMBLE_CPU,$ASSEMBLE_WALL,$LINEAR_SYSTEM_CPU,$LINEAR_SYSTEM_WALL,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
         else
             echo "   [!] Fallito o OOM per Cores=$n_cores, p=$p, Level=$L"
