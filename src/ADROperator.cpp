@@ -246,6 +246,19 @@ void ADROperator<dim, fe_degree, NumberType>::local_compute_diagonal(
 }
 
 // Explicit template instantiations
+template class ADROperator<1, 1, double>;
+template class ADROperator<1, 2, double>;
+template class ADROperator<1, 3, double>;
+template class ADROperator<1, 4, double>;
+template class ADROperator<1, 5, double>;
+template class ADROperator<1, 6, double>;
+template class ADROperator<1, 7, double>;
+template class ADROperator<1, 8, double>;
+template class ADROperator<1, 9, double>;
+template class ADROperator<1, 10, double>;
+template class ADROperator<1, 11, double>;
+template class ADROperator<1, 12, double>;
+
 template class ADROperator<2, 1, double>;
 template class ADROperator<2, 2, double>;
 template class ADROperator<2, 3, double>;

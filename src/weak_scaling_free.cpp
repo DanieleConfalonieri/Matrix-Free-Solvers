@@ -44,7 +44,7 @@ int main (int argc, char *argv[])
 
         const unsigned int degree_finite_element = (argc > 4) ? std::stoi(argv[4]) : 2; // Adjust from command line for higher/lower polynomial degree
 
-        const unsigned int dimension = 1;
+        const unsigned int dimension = 2;
 
         // Problem coefficients and BCs (shared by MG and non-MG solvers)
         const auto mu     = std::make_shared<Functions::ConstantFunction<dimension, double>>(3.0);
