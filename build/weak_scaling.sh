@@ -6,7 +6,7 @@ EXEC_MB="./weak_scaling_based"
 EXEC_CALC_CORES="./calc_core"
 MULTIGRID_OPTION="-mg"
 
-MAX_P=2
+MAX_P=3
 MAX_LEVEL_MF=6
 MAX_LEVEL_MB=6
 DIMENSION=2
