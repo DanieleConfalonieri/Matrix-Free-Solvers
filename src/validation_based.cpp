@@ -130,17 +130,17 @@ int main(int argc, char *argv[])
       problem.assemble();
       problem.solve();
 
-      // Output scritto solo per l'ultimo livello se richiesto
+      // Output wriiten just for the last level if required
       const bool profiling = (level == end_level) ? profiling_run : true; 
       if(!profiling) {
         problem.output(exact_solution);
       }
 
-      // Calcolo errori
+      // Claculate errors
       double error_L2 = problem.compute_error(VectorTools::L2_norm, *exact_solution);
       double error_H1 = problem.compute_error(VectorTools::H1_norm, *exact_solution);
 
-      // h = 1/2^L (cubo unitario)
+      // h = 1/2^L (unitary cube)
       const double h = 1.0 / std::pow(2.0, level);
       table.add_value("h", h);
       table.add_value("L2", error_L2);

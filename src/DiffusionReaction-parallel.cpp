@@ -10,7 +10,7 @@ void DiffusionReactionParallel::setup()
   cumulative_time = 0.0;
   // Create the mesh.
   {
-    // Generiamo direttamente l'ipercubo distribuito, esattamente come nel Matrix-Free
+    // Gnerate a unit cube mesh, which is the same as in the serial codes
     GridGenerator::hyper_cube(mesh, 0.0, 1.0, true);
     
     mesh.refine_global(mesh_refinement_level);
@@ -319,11 +319,11 @@ void DiffusionReactionParallel::solve()
     constraints.distribute(solution);
   }
 
-  // Stesse Metriche di Performance del Matrix-Free
+  // Same as in matrix-free, we report both CPU and wall time, the number of iterations, time per iteration and throughput in MDoFs/s.
   const double elapsed_wall_time = timer.wall_time();
   const double time_per_iter = elapsed_wall_time / n_iter;
   
-  // Calcoliamo il throughput in MDoFs/s, tenendo conto del numero totale di DoFs e del tempo per iterazione
+  //Calculating throughput in MDoFs/s: we take the total number of DoFs, divide by time per iteration .
   const double throughput_mdofs = dof_handler.n_dofs() / time_per_iter / 1e6;// MDoFs/s
   
   pcout << "   Solve linear system       (CPU/wall) " << timer.cpu_time() << " s/" << elapsed_wall_time << 's' << std::endl;
@@ -409,7 +409,7 @@ DiffusionReactionParallel::compute_error(
   
   VectorTools::integrate_difference(mapping,
                                     dof_handler,
-                                    solution_ghost, // Passiamo il vettore con i ghost!
+                                    solution_ghost, // we need to use the ghosted solution for error computation, since it might be needed on cells that are not owned by the current process
                                     exact_solution,
                                     error_per_cell,
                                     quadrature_error,
