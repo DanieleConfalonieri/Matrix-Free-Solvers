@@ -4,12 +4,12 @@ import numpy as np
 import os
 import sys
 
-# ==============================================================================
-# 1. CONFIGURAZIONE STILE GRAFICI
-# ==============================================================================
+# ==================================================================
+# 1. PLOT STYLE CONFIGURATION
+# ==================================================================
 def setup_plot_style():
-    """Configura uno stile professionale per i grafici."""
-    # Cerchiamo di usare uno stile pulito, con fallback se non disponibile
+    """Configure a professional plotting style."""
+    # Try to use a clean style, with fallbacks if unavailable
     available_styles = plt.style.available
     if 'seaborn-v0_8-whitegrid' in available_styles:
         plt.style.use('seaborn-v0_8-whitegrid')
@@ -30,30 +30,28 @@ def setup_plot_style():
         'lines.markersize': 8
     })
 
-# ==============================================================================
-# 2. ESTRAZIONE E PROCESSING
-# ==============================================================================
+# ==================================================================
+# 2. EXTRACTION AND PROCESSING
+# ==================================================================
 def extract_and_process_data(filepath):
-    """
-    Carica il CSV, gestisce l'encoding e calcola le colonne dei totali.
-    """
+    """Load the CSV, handle encoding, and compute total columns."""
     if not os.path.exists(filepath):
-        # Generiamo un errore critico se il file non c'è, ma gestito nel main
-        raise FileNotFoundError(f"File '{filepath}' non trovato.")
+        # Raise a critical error if the file is missing; handled in main
+        raise FileNotFoundError(f"File '{filepath}' not found.")
 
     encodings = ['utf-8', 'cp1252', 'latin1', 'iso-8859-1']
     df = None
     
-    # Tentativo di lettura con diversi encoding
+    # Attempt reading with multiple encodings
     for enc in encodings:
         try:
-            # Leggiamo tutto subito, se fallisce passa al prossimo encoding
+            # Read immediately; on failure try the next encoding
             df_temp = pd.read_csv(filepath, sep=',', encoding=enc)
             
-            # Controllo base: se ha meno di 2 colonne, probabilmente il separatore è sbagliato
-            # o l'encoding ha rotto tutto.
+            # Basic check: if less than 2 columns, separator may be wrong
+            # or the encoding may have corrupted the file.
             if len(df_temp.columns) > 1:
-                print(f"-> File caricato con successo (encoding: {enc})")
+                print(f"-> File successfully loaded (encoding: {enc})")
                 df = df_temp
                 break 
         except (UnicodeDecodeError, pd.errors.ParserError):
@@ -63,10 +61,10 @@ def extract_and_process_data(filepath):
         raise ValueError("Impossibile determinare l'encoding corretto o leggere il file.")
 
     # --- CLEANING ---
-    # Rimuoviamo spazi dai nomi delle colonne
+    # Strip whitespace from column names
     df.columns = df.columns.str.strip()
     
-    # Colonne necessarie per il calcolo
+    # Columns required for calculations
     required_cols = [
         'SetupSystemCPU', 'RhsCpu', 'SolvingLinearSystemCPU',
         'SetupSystemWall', 'RhsWall', 'SolvingLinearSystemWall'
@@ -74,29 +72,29 @@ def extract_and_process_data(filepath):
     
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
-        raise ValueError(f"Il CSV manca delle seguenti colonne necessarie: {missing}")
+        raise ValueError(f"The CSV is missing the following required columns: {missing}")
 
-    # --- CALCOLO TOTALI ---
-    # Somma CPU Time
+    # --- TOTALS CALCULATION ---
+    # Sum CPU Time
     df['TotalTimeCPU'] = (
         df['SetupSystemCPU'] + 
         df['RhsCpu'] + 
         df['SolvingLinearSystemCPU']
     )
     
-    # Somma Wall Time
+    # Sum Wall Time
     df['TotalTimeWall'] = (
         df['SetupSystemWall'] + 
         df['RhsWall'] + 
         df['SolvingLinearSystemWall']
     )
 
-    print("-> Colonne 'TotalTimeCPU' e 'TotalTimeWall' calcolate.")
+    print("-> Columns 'TotalTimeCPU' and 'TotalTimeWall' computed.")
     return df
 
-# ==============================================================================
-# 3. FUNZIONI DI PLOTTING
-# ==============================================================================
+# ==================================================================
+# 3. PLOTTING FUNCTIONS
+# ==================================================================
 
 def plot_strong_scaling(df):
     """
@@ -104,11 +102,11 @@ def plot_strong_scaling(df):
     X=Cores, Y=TotalWall, Degree=6, Refinement=3
     Trace: MatrixFree vs MatrixBased (se presenti)
     """
-    # Filtro richiesto dalla specifica
+    # Filter required by specification
     subset = df[(df['Degree'] == 6) & (df['Refinement'] == 3)].copy()
     
     if subset.empty:
-        print("Warning: Dati insufficienti per Strong Scaling (Degree=6, Ref=3). Salto grafico.")
+        print("Warning: Insufficient data for Strong Scaling (Degree=6, Ref=3). Skipping plot.")
         return
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -116,7 +114,7 @@ def plot_strong_scaling(df):
     solvers = subset['Solver'].unique()
     
     for solver in solvers:
-        # Ordiniamo per Cores per avere una linea coerente
+        # Sort by Cores to have a coherent line
         data = subset[subset['Solver'] == solver].sort_values('Cores')
         ax.plot(data['Cores'], data['TotalTimeWall'], marker='o', label=solver)
 
@@ -124,11 +122,11 @@ def plot_strong_scaling(df):
     ax.set_xlabel('Number of Cores')
     ax.set_ylabel('Total Wall Time (s)')
     
-    # Scala Log-Log per strong scaling
+    # Use log-log scale for strong scaling
     ax.set_xscale('log')
     ax.set_yscale('log')
     
-    # Gestione ticks asse X (mostra i numeri interi dei core presenti)
+    # Handle X-axis ticks (show integer core counts present)
     unique_cores = sorted(subset['Cores'].unique())
     ax.set_xticks(unique_cores)
     ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
@@ -145,25 +143,25 @@ def plot_weak_scaling(df):
     X=Cores, Y=TotalWall
     Traces: Diversi Degree (mostrando l'evoluzione)
     """
-    # Nota: Assumiamo MatrixFree come riferimento principale se non specificato,
-    # oppure plottiamo tutto. Qui plottiamo MatrixFree per pulizia, come spesso accade.
+    # Note: Prefer MatrixFree as primary reference if present; otherwise plot available solver.
+    # Here we plot MatrixFree for clarity, which is commonly used.
     solver_target = 'MatrixFree'
     subset = df[df['Solver'] == solver_target].copy()
     
     if subset.empty:
-        # Fallback se non c'è MatrixFree, usiamo il primo disponibile
+        # Fallback: if MatrixFree is missing, use the first available solver
         if not df['Solver'].empty:
             solver_target = df['Solver'].iloc[0]
             subset = df[df['Solver'] == solver_target].copy()
         else:
-            print("Warning: Dati vuoti per Weak Scaling.")
+            print("Warning: Empty data for Weak Scaling.")
             return
 
     fig, ax = plt.subplots(figsize=(10, 6))
     
     degrees = sorted(subset['Degree'].unique())
     
-    # Mappa colori per i degree
+    # Color map for degrees
     cmap = plt.get_cmap('viridis')
     colors = [cmap(i) for i in np.linspace(0, 1, len(degrees))]
 
@@ -187,90 +185,85 @@ def plot_weak_scaling(df):
 
 def plot_problem_size_stacked(df):
     """
-    Grafico 3: Istogrammi Stacked Side-by-Side (MatrixFree vs MatrixBased)
+    Plot 3: Side-by-side stacked bar charts (MatrixFree vs MatrixBased)
     X=Degree, Y=WallTime, Cores=56
-    Componenti: Setup, Rhs, Solve
+    Components: Setup, Rhs, Solve
     """
-    # Filtro Cores = 56
+    # Filter for Cores = 56
     subset = df[df['Cores'] == 56].sort_values('Degree')
     if subset.empty:
-        print("Warning: Nessun dato trovato per Cores=56. Salto grafico Stacked.")
+        print("Warning: No data found for Cores=56. Skipping Stacked plot.")
         return
 
     degrees = sorted(subset['Degree'].unique())
-    solvers = sorted(subset['Solver'].unique()) # Es: ['MatrixBased', 'MatrixFree']
-    
-    # Componenti da impilare
+    solvers = sorted(subset['Solver'].unique())  # e.g. ['MatrixBased', 'MatrixFree']
+
+    # Components to stack
     components = ['SetupSystemWall', 'RhsWall', 'SolvingLinearSystemWall']
     comp_labels = ['Setup', 'RHS', 'Solve']
-    colors = ['#2ecc71', '#f1c40f', '#e74c3c'] # Verde, Giallo, Rosso
+    colors = ['#2ecc71', '#f1c40f', '#e74c3c']  # Green, Yellow, Red
 
     fig, ax = plt.subplots(figsize=(12, 7))
 
     x = np.arange(len(degrees))
-    width = 0.35  # Larghezza barre
-    
-    # Loop sui solver (MatrixFree vs MatrixBased) per posizionarli side-by-side
+    width = 0.35  # Bar width
+
+    # Loop over solvers to position them side-by-side
     for i, solver in enumerate(solvers):
-        # Filtriamo i dati per questo solver
+        # Filter data for this solver
         solver_data = subset[subset['Solver'] == solver].set_index('Degree')
-        
-        # Reindicizziamo per assicurare che ci siano tutti i degree (riempie NaN con 0)
+
+        # Reindex to ensure all degrees are present (fill NaN with 0)
         solver_data = solver_data.reindex(degrees).fillna(0)
-        
-        # Calcolo posizione x (shift a sinistra o destra)
-        # Se c'è 1 solver, offset=0. Se ce ne sono 2: -width/2 e +width/2
+
+        # Compute x position (shift left or right)
+        # If 1 solver -> offset=0; if 2 solvers -> -width/2 and +width/2
         if len(solvers) > 1:
-            offset = (i - 0.5) * width * 1.1 # 1.1 per dare un piccolo spazio tra i gruppi
+            offset = (i - 0.5) * width * 1.1  # 1.1 to leave a small gap between groups
         else:
             offset = 0
-            
-        # Variabile per tracciare il fondo delle barre (per lo stacking)
+
+        # Track bottom of bars for stacking
         bottom = np.zeros(len(degrees))
-        
-        # Loop sulle componenti (Setup, Rhs, Solve)
+
+        # Loop over components (Setup, Rhs, Solve)
         for j, comp in enumerate(components):
             vals = solver_data[comp].values
-            
-            # Label solo per il primo solver per evitare duplicati in legenda
-            # Ma qui la legenda è tricky perché abbiamo colori (componenti) e posizioni (solver).
-            # Non mettiamo label qui, la costruiamo custom dopo.
-            
-            # Tratteggio per distinguere i solver visivamente (opzionale)
+
+            # Hatching to visually distinguish solvers (optional)
             hatch = '//' if i == 1 else ''
             edge_color = 'white'
-            
-            ax.bar(x + offset, vals, width, bottom=bottom, 
+
+            ax.bar(x + offset, vals, width, bottom=bottom,
                    color=colors[j], edgecolor=edge_color, hatch=hatch, alpha=0.9)
-            
+
             bottom += vals
 
-    # Decorazioni
+    # Decorations
     ax.set_title('Time Breakdown by Degree (Cores=56)', fontweight='bold')
     ax.set_xlabel('Polynomial Degree')
     ax.set_ylabel('Wall Time (s)')
     ax.set_xticks(x)
     ax.set_xticklabels(degrees)
-    
-    # --- LEGENDA PERSONALIZZATA ---
+
+    # --- CUSTOM LEGEND ---
     from matplotlib.patches import Patch
-    
-    # Legenda Colori (Componenti)
+
+    # Color legend (Components)
     legend_elements = [Patch(facecolor=colors[j], label=comp_labels[j]) for j in range(len(colors))]
-    
-    # Legenda Solver (Pattern)
+
+    # Solver legend (Pattern)
     legend_elements.append(Patch(facecolor='gray', label=solvers[0], alpha=0.5))
     if len(solvers) > 1:
         legend_elements.append(Patch(facecolor='gray', hatch='//', label=solvers[1], alpha=0.5))
 
     ax.legend(handles=legend_elements, title="Components & Solvers")
-    
+
     plt.tight_layout()
     plt.show()
 
 def plot_problem_size_lines(df):
-    """
-    Grafico 4: Line Plot Total Time vs Degree
+    """Plot 4: Line Plot Total Time vs Degree
     X=Degree, Y=TotalWallTime, Cores=56
     """
     subset = df[df['Cores'] == 56].sort_values('Degree')
@@ -301,36 +294,36 @@ def plot_problem_size_lines(df):
 if __name__ == "__main__":
     setup_plot_style()
     
-    # Imposta il nome del tuo file CSV qui
-    # Nota: Assicurati che il file sia nella stessa cartella o fornisci il path completo
+    # Set your CSV filename here
+    # Note: Ensure the file is in the same folder or provide the full path
     filename = 'tscal_ncores_p6_m3.csv' 
 
     try:
-        print(f"--- Inizio Analisi: {filename} ---")
+        print(f"--- Starting Analysis: {filename} ---")
         
-        # 1. Estrazione e Calcolo
+        # 1. Extraction and Calculation
         df_processed = extract_and_process_data(filename)
         
-        print(f"Dati caricati: {len(df_processed)} righe.")
-        # Anteprima dati
+        print(f"Loaded data: {len(df_processed)} rows.")
+        # Data preview
         print(df_processed[['Cores', 'Solver', 'Degree', 'TotalTimeWall']].head())
 
-        # 2. Generazione Grafici
-        print("\nGenerazione Grafico 1: Strong Scaling...")
+        # 2. Generate plots
+        print("\nGenerating Plot 1: Strong Scaling...")
         plot_strong_scaling(df_processed)
         
-        print("Generazione Grafico 2: Weak Scaling...")
+        print("Generating Plot 2: Weak Scaling...")
         plot_weak_scaling(df_processed)
         
-        print("Generazione Grafico 3: Stacked Bar Analysis...")
+        print("Generating Plot 3: Stacked Bar Analysis...")
         plot_problem_size_stacked(df_processed)
         
-        print("Generazione Grafico 4: Total Time Lines...")
+        print("Generating Plot 4: Total Time Lines...")
         plot_problem_size_lines(df_processed)
         
-        print("\n--- Elaborazione completata con successo. ---")
+        print("\n--- Processing completed successfully. ---")
 
     except Exception as e:
-        print(f"\nERRORE CRITICO:\n{e}")
+        print(f"\nCRITICAL ERROR:\n{e}")
         import traceback
         traceback.print_exc()

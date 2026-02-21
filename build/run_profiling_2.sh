@@ -9,7 +9,7 @@ MULTIGRID_OPTION="-mg"
 MAX_LEVEL_MF=4
 N_CORES=4
 
-# Intestazione CSV (Aggiunta colonna Cores all'inizio)
+# CSV Header (Added Cores column at the beginning)
 echo "Cores,Solver,Degree,Refinement,SetupSystemCPU,SetupSystemWall,NumberOfElements,DoFs,DoFsPerCell,QPointsPerCell,RhsCpu,RhsWall,SolvingLinearSystemCPU,SolvingLinearSystemWall,Iterations,TimePerIter(s),Throughput(MDoFs/s),OutputResultCpu,OutputResultWall" > $CSV_FILE
 
 # --- Matrix-Free Benchmark ---
@@ -20,7 +20,7 @@ for p in {1..6}; do
 
 	    OUTPUT=$(mpirun -n $N_CORES $EXEC_MF 1 $L "$MULTIGRID_OPTION" $p)
 
-	    # Estrazione dati (Regex invariate)
+	    # Data Extraction (Unchanging Regex)
 	    SETUP_SYSTEM_CPU=$(echo "$OUTPUT" | grep -oP 'Setup matrix-free system\s*\(CPU\/wall\)\s\K[0-9.]+')
 	    SETUP_SYSTEM_WALL=$(echo "$OUTPUT" | grep -oP 'Setup matrix-free system\s*\(CPU\/wall\)\s[0-9.]+\s*s\/\s*\K[0-9.]+')
 	    NUMBER_ELEMENTS=$(echo "$OUTPUT" | grep -oP 'Number of elements = \K[0-9]+')
@@ -40,7 +40,7 @@ for p in {1..6}; do
 	    if [ ! -z "$SETUP_SYSTEM_CPU" ] && [ ! -z "$SETUP_SYSTEM_WALL" ] && [ ! -z "$NUMBER_ELEMENTS" ] && [ ! -z "$DOFS" ] && [ ! -z "$DOFS_CELL" ] && [ ! -z "$QPOINTS_CELL" ] && [ ! -z "$RHS_CPU" ] && [ ! -z "$RHS_WALL" ] && [ ! -z "$LINEAR_SYSTEM_CPU" ] && [ ! -z "$LINEAR_SYSTEM_WALL" ] && [ ! -z "$ITERS" ] && [ ! -z "$TIME_ITER" ] && [ ! -z "$THROUGHPUT" ]; then
 	        echo "$N_CORES,MatrixFree,$p,$L,$SETUP_SYSTEM_CPU,$SETUP_SYSTEM_WALL,$NUMBER_ELEMENTS,$DOFS,$DOFS_CELL,$QPOINTS_CELL,$RHS_CPU,$RHS_WALL,$LINEAR_SYSTEM_CPU,$LINEAR_SYSTEM_WALL,$ITERS,$TIME_ITER,$THROUGHPUT" >> $CSV_FILE
 	    else
-	        echo "   [!] Fallito o OOM per Cores=$N_CORES, p=$p, Level=$L"
+	        echo "   [!] Failed or OOM for Cores=$N_CORES, p=$p, Level=$L"
 	    fi
 	done
 done

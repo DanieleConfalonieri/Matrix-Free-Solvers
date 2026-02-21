@@ -6,7 +6,7 @@ import re
 from matplotlib.ticker import FixedLocator, FixedFormatter, NullLocator
 
 # ==============================================================================
-# 1. CONFIGURAZIONE STILE
+# 1. STYLE CONFIGURATION
 # ==============================================================================
 def setup_plot_style():
     available_styles = plt.style.available
@@ -17,7 +17,7 @@ def setup_plot_style():
     else:
         plt.style.use('ggplot')
 
-    # (opzionale ma spesso utile) evita MathText sui formatter automatici
+    # (optional but often useful) avoids MathText on automatic formatters
     plt.rcParams.update({
         'font.size': 12,
         'axes.titlesize': 14,
@@ -28,11 +28,11 @@ def setup_plot_style():
         'figure.titlesize': 16,
         'lines.linewidth': 2.5,
         'lines.markersize': 8,
-        'axes.formatter.use_mathtext': False,  # aiuta a evitare 3×10^1
+        'axes.formatter.use_mathtext': False,  # helps avoid 3×10^1
     })
 
 # ==============================================================================
-# 2. NORMALIZZAZIONE SOLVER
+# 2. SOLVER NORMALIZATION
 # ==============================================================================
 def normalize_solver_name(s: str) -> str:
     if s is None:
@@ -58,11 +58,11 @@ def add_solver_norm(df: pd.DataFrame, col='Solver', newcol='Solver_norm'):
     return df
 
 # ==============================================================================
-# 3. LETTURA + TOTAL TIME
+# 3. READ + TOTAL TIME
 # ==============================================================================
 def extract_and_process_data(filepath):
     if not os.path.exists(filepath):
-        raise FileNotFoundError(f"File '{filepath}' non trovato.")
+        raise FileNotFoundError(f"File '{filepath}' not found.")
 
     encodings = ['utf-8', 'cp1252', 'latin1', 'iso-8859-1']
     df = None
@@ -71,14 +71,14 @@ def extract_and_process_data(filepath):
         try:
             df_temp = pd.read_csv(filepath, sep=',', encoding=enc)
             if len(df_temp.columns) > 1:
-                print(f"-> File caricato: {filepath} (encoding: {enc})")
+                print(f"-> File loaded: {filepath} (encoding: {enc})")
                 df = df_temp
                 break
         except (UnicodeDecodeError, pd.errors.ParserError):
             continue
 
     if df is None:
-        raise ValueError(f"Impossibile leggere '{filepath}' con gli encoding provati.")
+        raise ValueError(f"Unable to read '{filepath}' with the attempted encodings.")
 
     df.columns = df.columns.str.strip()
     for c in df.columns:
@@ -89,9 +89,9 @@ def extract_and_process_data(filepath):
     if 'TotalTimeWall' not in df.columns:
         if all(c in df.columns for c in wall_parts):
             df['TotalTimeWall'] = df['SetupSystemWall'] + df['RhsWall'] + df['SolvingLinearSystemWall']
-            print(f"-> {filepath}: calcolata 'TotalTimeWall' dai componenti Wall.")
+            print(f"-> {filepath}: computed 'TotalTimeWall' from Wall components.")
         else:
-            raise ValueError(f"{filepath}: manca 'TotalTimeWall' e mancano componenti Wall {wall_parts}.")
+            raise ValueError(f"{filepath}: missing 'TotalTimeWall' and missing Wall components {wall_parts}.")
 
     for col in ['Cores', 'Degree', 'Refinement', 'TotalTimeWall']:
         if col in df.columns:
@@ -100,7 +100,7 @@ def extract_and_process_data(filepath):
     return df
 
 # ==============================================================================
-# 4. STIMA T1 (ultima spiaggia)
+# 4. ESTIMATE T1 (last resort)
 # ==============================================================================
 def estimate_t1_from_tp(df_case):
     d = df_case.dropna(subset=['Cores', 'TotalTimeWall']).copy()
@@ -114,7 +114,7 @@ def estimate_t1_from_tp(df_case):
     return t1 if np.isfinite(t1) and t1 > 0 else np.nan
 
 # ==============================================================================
-# 5. BASELINE ROBUSTA
+# 5. ROBUST BASELINE
 # ==============================================================================
 def add_onecore_baseline_robust(df_multi, df_one,
                                keys=('Solver', 'Degree', 'Refinement'),
@@ -127,12 +127,12 @@ def add_onecore_baseline_robust(df_multi, df_one,
     keys_eff = [k if k != 'Solver' else 'Solver_norm' for k in keys]
 
     if 'TotalTimeWall' not in dfm.columns or 'TotalTimeWall' not in dfo.columns:
-        raise ValueError("Serve 'TotalTimeWall' in entrambi i dataframe.")
+        raise ValueError("'TotalTimeWall' is required in both dataframes.")
 
     dfm['T1_Wall'] = np.nan
     dfm['T1_Source'] = 'missing'
 
-    # A) one-core esatto
+    # A) exact one-core
     dfo_1 = dfo.copy()
     if 'Cores' in dfo_1.columns:
         dfo_1 = dfo_1[dfo_1['Cores'] == 1]
@@ -144,7 +144,7 @@ def add_onecore_baseline_robust(df_multi, df_one,
     dfm['T1_Wall'] = idx.map(t1_exact).to_numpy()
     dfm.loc[dfm['T1_Wall'].notna(), 'T1_Source'] = 'onecore_exact'
 
-    # B) fallback Degree/Refinement
+    # B) Degree/Refinement fallback
     if allow_degree_ref_fallback and ('Degree' in dfm.columns) and ('Refinement' in dfm.columns):
         miss = dfm['T1_Wall'].isna()
         if miss.any():
@@ -155,7 +155,7 @@ def add_onecore_baseline_robust(df_multi, df_one,
             dfm.loc[miss, 'T1_Wall'] = idx2.map(t1_degref).to_numpy()
             dfm.loc[miss & dfm['T1_Wall'].notna(), 'T1_Source'] = 'onecore_degref'
 
-    # C) fallback dal multi-core a 1 core
+    # C) fallback from multi-core to 1 core
     if allow_from_multi_1core and 'Cores' in dfm.columns:
         miss = dfm['T1_Wall'].isna()
         if miss.any():
@@ -168,7 +168,7 @@ def add_onecore_baseline_robust(df_multi, df_one,
                 dfm.loc[miss, 'T1_Wall'] = idx3.map(t1_from_multi).to_numpy()
                 dfm.loc[miss & dfm['T1_Wall'].notna(), 'T1_Source'] = 'multi_1core'
 
-    # D) stima T1
+    # D) estimate T1
     if allow_estimate:
         miss = dfm['T1_Wall'].isna()
         if miss.any():
@@ -191,7 +191,7 @@ def add_onecore_baseline_robust(df_multi, df_one,
     return dfm
 
 # ==============================================================================
-# helper: tick asse X su log scale con etichette fissate (NO 3×10¹)
+# helper: X-axis ticks on log scale with fixed labels (NO 3×10¹)
 # ==============================================================================
 def apply_fixed_log_xticks(ax, ticks):
     ticks = sorted({float(t) for t in ticks})
@@ -202,11 +202,11 @@ def apply_fixed_log_xticks(ax, ticks):
         else:
             labels.append(str(t))
 
-    # forza locator/formatter (sovrascrive LogFormatterMathtext)
+    # force locator/formatter (overrides LogFormatterMathtext)
     ax.xaxis.set_major_locator(FixedLocator(ticks))
     ax.xaxis.set_major_formatter(FixedFormatter(labels))
 
-    # opzionale: niente tick minori (spesso più pulito nei plot HPC)
+    # optional: no minor ticks (often cleaner in HPC plots)
     ax.xaxis.set_minor_locator(NullLocator())
 
 # ==============================================================================
@@ -219,7 +219,7 @@ def plot_speedup_strong_scaling(df, degree=6, refinement=3):
 
     cores_all = sorted(base['Cores'].unique())
     if len(cores_all) == 0:
-        print(f"Warning: nessun core disponibile (Degree={degree}, Ref={refinement}).")
+        print(f"Warning: no cores available (Degree={degree}, Ref={refinement}).")
         return
 
     subset = base.dropna(subset=['TotalTimeWall', 'T1_Wall']).copy()
@@ -242,7 +242,7 @@ def plot_speedup_strong_scaling(df, degree=6, refinement=3):
         ax.legend()
         plt.tight_layout()
         plt.show()
-        print("Nota: non ci sono punti speedup (manca T1_Wall/TotalTimeWall), ma la linea ideale è stata tracciata.")
+        print("Note: there are no speedup points (missing T1_Wall/TotalTimeWall), but the ideal line has been plotted.")
         return
 
     subset['Speedup'] = subset['T1_Wall'] / subset['TotalTimeWall']
@@ -279,7 +279,7 @@ def plot_efficiency_strong_scaling(df, degree=6, refinement=3):
 
     cores_all = sorted(base['Cores'].unique())
     if len(cores_all) == 0:
-        print(f"Warning: nessun core disponibile (Degree={degree}, Ref={refinement}).")
+        print(f"Warning: no cores available (Degree={degree}, Ref={refinement}).")
         return
 
     subset = base.dropna(subset=['TotalTimeWall', 'T1_Wall', 'Cores']).copy()
@@ -301,7 +301,7 @@ def plot_efficiency_strong_scaling(df, degree=6, refinement=3):
         ax.legend()
         plt.tight_layout()
         plt.show()
-        print("Nota: non ci sono punti efficiency (manca T1_Wall/TotalTimeWall), ma la linea ideale è stata tracciata.")
+        print("Note: there are no efficiency points (missing T1_Wall/TotalTimeWall), but the ideal line has been plotted.")
         return
 
     subset['Efficiency'] = subset['T1_Wall'] / (subset['Cores'] * subset['TotalTimeWall'])
@@ -342,7 +342,7 @@ if __name__ == "__main__":
 
         df_multi = add_onecore_baseline_robust(df_multi, df_one)
 
-        print("\nCores disponibili (Degree=6 Ref=3):",
+        print("\nAvailable cores (Degree=6 Ref=3):",
               sorted(df_multi[(df_multi['Degree'] == 6) & (df_multi['Refinement'] == 3)]
                      ['Cores'].dropna().unique()))
 
@@ -350,4 +350,4 @@ if __name__ == "__main__":
         plot_efficiency_strong_scaling(df_multi, degree=6, refinement=3)
 
     except Exception as e:
-        print(f"ERRORE: {e}")
+        print(f"ERROR: {e}")

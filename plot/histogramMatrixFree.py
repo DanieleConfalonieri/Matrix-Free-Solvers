@@ -47,30 +47,30 @@ def plot_matrixfree_56cores_by_refinements(
     required = {"Cores", "Solver", "Degree", "Refinement", setup_col, solve_col}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"Colonne mancanti nel CSV: {sorted(missing)}")
+        raise ValueError(f"Missing columns in CSV: {sorted(missing)}")
 
-    # --- Filtra SOLO MatrixFree (case-insensitive) e SOLO cores richiesti
+    # --- Filter ONLY MatrixFree (case-insensitive) and ONLY requested cores
     df = df.copy()
     sraw = df["Solver"].astype(str).str.strip().str.lower()
     df = df[(sraw == "matrixfree") & (df["Cores"] == cores)].copy()
     if df.empty:
         available_cores = sorted(pd.read_csv(csv_path)["Cores"].unique())
         raise ValueError(
-            f"Nessuna riga con Solver=MatrixFree e Cores={cores}. "
-            f"Cores disponibili nel file: {available_cores}"
+            f"No rows with Solver=MatrixFree and Cores={cores}. "
+            f"Available cores in file: {available_cores}"
         )
 
-    # --- Stile
-    COLOR_FREE = "#0b3d91"   # blu profondo
+    # --- Style
+    COLOR_FREE = "#0b3d91"   # deep blue
     bar_width = 0.55
 
-    # --- Scala/unità coerente tra i plot (stimata su tutte le refinements richieste)
+    # --- Consistent scale/unit across plots (estimated on all requested refinements)
     df_all_refs = df[df["Refinement"].isin(list(refinements))].copy()
     if df_all_refs.empty:
         available_refs = sorted(df["Refinement"].unique())
         raise ValueError(
-            f"Nessuna riga per Refinement in {list(refinements)} con Cores={cores} e Solver=MatrixFree. "
-            f"Refinement disponibili: {available_refs}"
+            f"No rows for Refinement in {list(refinements)} with Cores={cores} and Solver=MatrixFree. "
+            f"Available refinements: {available_refs}"
         )
 
     if agg == "sum":
@@ -81,32 +81,32 @@ def plot_matrixfree_56cores_by_refinements(
     values_seconds = np.concatenate([tmp[setup_col].to_numpy(), tmp[solve_col].to_numpy()])
     scale, unit = _pick_unit_and_scale(values_seconds)
 
-    # --- Un plot per ciascun refinement richiesto
+    # --- One plot for each requested refinement
     for ref in refinements:
         dfr = df[df["Refinement"] == ref].copy()
         if dfr.empty:
             continue
 
-        # Aggregazione per Degree (Ref fissato)
+        # Aggregation by Degree (Refinement fixed)
         if agg == "sum":
             dfg = dfr.groupby(["Degree", "Refinement"], as_index=False)[[setup_col, solve_col]].sum()
         elif agg == "mean":
             dfg = dfr.groupby(["Degree", "Refinement"], as_index=False)[[setup_col, solve_col]].mean()
         else:
-            raise ValueError("agg deve essere 'mean' oppure 'sum'")
+            raise ValueError("agg must be 'mean' or 'sum'")
 
-        # Applica scala comune
+        # Apply common scale
         dfg[setup_col] *= scale
         dfg[solve_col] *= scale
 
-        # Ordina per Degree
+        # Sort by Degree
         dfg = dfg.sort_values(["Degree"], kind="mergesort").reset_index(drop=True)
 
         x = np.arange(len(dfg))
         labels = [f"Deg {d}" for d in dfg["Degree"]]
 
         # ==========================================================
-        # Plot 1: tempi assoluti (Setup bottom + Solve top), log scale
+        # Plot 1: absolute times (Setup bottom + Solve top), log scale
         # ==========================================================
         fig, ax = plt.subplots(figsize=(max(10, 0.9 * len(dfg)), 6))
 
@@ -142,7 +142,7 @@ def plot_matrixfree_56cores_by_refinements(
         plt.show()
 
         # ============================================
-        # Plot 2: composizione (frazioni) Setup vs Solve
+        # Plot 2: composition (fractions) Setup vs Solve
         # ============================================
         setup_vals = dfg[setup_col].to_numpy(dtype=float)
         solve_vals = dfg[solve_col].to_numpy(dtype=float)
@@ -156,7 +156,7 @@ def plot_matrixfree_56cores_by_refinements(
         ax2.bar(x, setup_frac, width=bar_width, color=COLOR_FREE, alpha=0.35, label="Setup fraction")
         ax2.bar(x, solve_frac, width=bar_width, bottom=setup_frac, color=COLOR_FREE, alpha=1.0, label="Solve fraction")
 
-        # percentuale solve sopra (facoltativo ma utile)
+        # percentage solve above (optional but useful)
         for xi, sf in zip(x, solve_frac):
             if np.isfinite(sf):
                 ax2.text(xi, 1.02, f"{sf*100:.0f}%", ha="center", va="bottom", fontsize=9)
@@ -175,8 +175,8 @@ def plot_matrixfree_56cores_by_refinements(
         plt.show()
 
         # ============================================
-        # Plot 3: rapporto Solve / Setup (solo rapporto)
-        # ============================================
+        # Plot 3: Solve / Setup ratio (ratio only)
+        # =============================================
         ratio = np.divide(
             solve_vals,
             setup_vals,
@@ -187,10 +187,10 @@ def plot_matrixfree_56cores_by_refinements(
         fig3, ax3 = plt.subplots(figsize=(max(10, 0.9 * len(dfg)), 4.5))
         ax3.plot(x, ratio, marker="o", linewidth=2, color=COLOR_FREE)
 
-        # riferimento ratio = 1
+        # reference ratio = 1
         ax3.axhline(1.0, linestyle="--", linewidth=1)
 
-        # etichette sul rapporto
+        # labels on ratio
         for xi, r in zip(x, ratio):
             if np.isfinite(r):
                 ax3.text(xi, r * 1.05, f"{r:.2f}", ha="center", va="bottom", fontsize=9)

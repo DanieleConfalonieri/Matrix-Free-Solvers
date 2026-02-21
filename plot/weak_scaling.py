@@ -78,11 +78,11 @@ def plot_time_strong_scaling_per_p(df, refinement):
     subset = df[df['Refinement'] == refinement].copy()
     subset = subset.dropna(subset=['Cores', 'TotalTimeWall', 'Degree'])
 
-    # --- FILTRI PER PULIZIA GRAFICO ---
-    # 1. Discretizzazione ogni 2 (solo core pari)
+    # --- FILTERS FOR PLOT CLEANUP ---
+    # 1. Discretization every 2 (even cores only)
     subset = subset[subset['Cores'] % 2 == 0]
 
-    # 2. Per p = 1, parti da 8 core (scarta i casi dove Degree==1 e Cores<8)
+    # 2. For p = 1, start from 8 cores (discard cases where Degree==1 and Cores<8)
     subset = subset[~((subset['Degree'] == 1) & (subset['Cores'] < 2))]
     # ----------------------------------
 
@@ -100,7 +100,7 @@ def plot_time_strong_scaling_per_p(df, refinement):
     for i, p in enumerate(degrees):
         data_p = subset[subset['Degree'] == p].sort_values('Cores')
         if not data_p.empty:
-            # base_core ora sarà 8 per p=1, 16 per p=2, e 54 per p=3
+            # base_core will be 8 for p=1, 16 for p=2, and 54 for p=3
             base_core = data_p['Cores'].min()
 
             ax.plot(data_p['Cores'], data_p['TotalTimeWall'], marker='o',
@@ -121,7 +121,7 @@ def plot_time_strong_scaling_per_p(df, refinement):
     ax.set_xscale('log')
     ax.set_yscale('log')
 
-    # Ora i ticks sull'asse x mostreranno solo i core filtrati (pari, partendo da 8)
+    # Now the ticks on the x-axis will show only the filtered cores (even, starting from 8)
     apply_fixed_log_xticks(ax, cores_all)
 
     ax.grid(True, which="both", ls="-", alpha=0.5)

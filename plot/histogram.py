@@ -47,9 +47,9 @@ def plot_histogram_selected_cores(
     required = {"Cores", "Solver", "Degree", "Refinement", setup_col, solve_col}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"Colonne mancanti nel CSV: {sorted(missing)}")
+        raise ValueError(f"Missing columns in CSV: {sorted(missing)}")
 
-    # Normalizza solver
+    # Normalize solver
     df = df.copy()
     sraw = df["Solver"].astype(str).str.strip().str.lower()
     df["Solver_norm"] = np.where(
@@ -59,38 +59,38 @@ def plot_histogram_selected_cores(
     )
     df = df[df["Solver_norm"].isin(["matrix_free", "matrix_based"])].copy()
     if df.empty:
-        raise ValueError("Non trovo righe con Solver=MatrixFree/MatrixBased nel CSV.")
+        raise ValueError("No rows found with Solver=MatrixFree/MatrixBased in CSV.")
 
-    # Colori
-    COLOR_FREE = "#0b3d91"   # blu profondo
-    COLOR_BASED = "#7aa6ff"  # blu chiaro
+    # Colors
+    COLOR_FREE = "#0b3d91"   # deep blue
+    COLOR_BASED = "#7aa6ff"  # light blue
 
     available = set(df["Cores"].unique())
     cores_to_plot = [c for c in selected_cores if c in available]
     if not cores_to_plot:
         raise ValueError(
-            f"Nessuno dei core richiesti {selected_cores} è presente nel CSV. Disponibili: {sorted(available)}"
+            f"None of the requested cores {selected_cores} are present in the CSV. Available: {sorted(available)}"
         )
 
     for cores in cores_to_plot:
         dfi = df[df["Cores"] == cores].copy()
 
-        # Aggregazione
+        # Aggregation
         group_cols = ["Solver_norm", "Degree", "Refinement"]
         if agg == "sum":
             dfg = dfi.groupby(group_cols, as_index=False)[[setup_col, solve_col]].sum()
         elif agg == "mean":
             dfg = dfi.groupby(group_cols, as_index=False)[[setup_col, solve_col]].mean()
         else:
-            raise ValueError("agg deve essere 'mean' oppure 'sum'")
+            raise ValueError("agg must be 'mean' or 'sum'")
 
-        # Scala/unità
+        # Scale/unit
         values_seconds = np.concatenate([dfg[setup_col].to_numpy(), dfg[solve_col].to_numpy()])
         scale, unit = _pick_unit_and_scale(values_seconds)
         dfg[setup_col] *= scale
         dfg[solve_col] *= scale
 
-        # Categorie
+        # Categories
         cats = (
             dfg[["Degree", "Refinement"]]
             .drop_duplicates()
@@ -115,7 +115,7 @@ def plot_histogram_selected_cores(
         gap = 0.08
 
         # ==========================================================
-        # Plot 1: tempi assoluti
+        # Plot 1: absolute times
         # ==========================================================
         fig1, ax1 = plt.subplots(figsize=(max(12, 1.0 * len(cats)), 6))
         labeled = set()
@@ -170,7 +170,7 @@ def plot_histogram_selected_cores(
         plt.show()
 
         # ==========================================================
-        # Plot 2: composizione (frazioni)
+        # Plot 2: composition (fractions)
         # ==========================================================
         setup_based, solve_based, setup_free, solve_free = [], [], [], []
         for deg, ref in zip(cats["Degree"], cats["Refinement"]):
@@ -219,7 +219,7 @@ def plot_histogram_selected_cores(
         ax2.set_xlabel("Degree | Refinement")
         ax2.set_title(f"Setup vs Solve composition (fractions) | Cores = {cores}")
 
-        # LEGEND FIXATA (Patch manuali)
+        # FIXED LEGEND (Manual patches)
         legend_handles = [
             Patch(facecolor=COLOR_BASED, edgecolor="none", alpha=0.35, label="MatrixBased - setup frac"),
             Patch(facecolor=COLOR_BASED, edgecolor="none", alpha=1.00, label="MatrixBased - solve frac"),
@@ -233,7 +233,7 @@ def plot_histogram_selected_cores(
         plt.show()
 
         # ==========================================================
-        # Plot 3: rapporto Solve / Setup
+        # Plot 3: Solve / Setup ratio
         # ==========================================================
         def ratio(solve_arr, setup_arr):
             return np.divide(

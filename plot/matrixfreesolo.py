@@ -1,10 +1,10 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --- 1) Carica i dati ---
+# --- 1) Load data ---
 df = pd.read_csv("MatrixFree_p12.csv")
 
-# --- 2) Conversione colonne numeriche ---
+# --- 2) Convert numeric columns ---
 num_cols = [
     "DoFs",
     "SolvingLinearSystemWall",
@@ -18,16 +18,16 @@ for c in num_cols:
     if c in df.columns:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
-# --- 3) Filtra righe valide ---
+# --- 3) Filter valid rows ---
 df = df.dropna(subset=["DoFs", "SolvingLinearSystemWall", "Refinement"])
 df = df[(df["DoFs"] > 0) & (df["SolvingLinearSystemWall"] > 0)]
 
-# --- 4) Plot log-log: un grafico per ogni Refinement ---
+# --- 4) Log-log plot: one graph for each Refinement ---
 for ref, df_ref in df.groupby("Refinement"):
 
     plt.figure()
 
-    # una curva per solver dentro ogni refinement
+    # one curve per solver in each refinement
     for solver, g in df_ref.groupby("Solver"):
         g = g.sort_values("DoFs")
 
