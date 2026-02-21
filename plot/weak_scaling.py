@@ -83,7 +83,7 @@ def plot_time_strong_scaling_per_p(df, refinement):
     subset = subset[subset['Cores'] % 2 == 0]
 
     # 2. Per p = 1, parti da 8 core (scarta i casi dove Degree==1 e Cores<8)
-    subset = subset[~((subset['Degree'] == 1) & (subset['Cores'] < 8))]
+    subset = subset[~((subset['Degree'] == 1) & (subset['Cores'] < 2))]
     # ----------------------------------
 
     if subset.empty:
