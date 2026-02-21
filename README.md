@@ -1,7 +1,7 @@
 
 # Matrix-Free Solver for Advection-Diffusion-Reaction
 
-This repository contains a high-performance, massively parallel Finite Element solver for the Advection-Diffusion-Reaction (ADR) equation. The project is developed using the [deal.II](https://www.dealii.org/) finite element library and implements a**Matrix-Free** approach, coupled with a Matrix-Free Geometric Multigrid (GMG) preconditioner.
+This repository contains a high-performance, massively parallel Finite Element solver for the Advection-Diffusion-Reaction (ADR) equation. The project is developed using the [deal.II](https://www.dealii.org/) finite element library and implements a **Matrix-Free** approach, coupled with a Matrix-Free Geometric Multigrid (GMG) preconditioner.
 
 This project was developed as part of the *Numerical Methods for Partial Differential Equations* and *High Performance Computing Engineering* courses at **Politecnico di Milano**.
 
