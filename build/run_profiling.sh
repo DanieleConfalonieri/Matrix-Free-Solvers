@@ -9,10 +9,8 @@ MULTIGRID_OPTION="-mg"
 MAX_LEVEL_MF=3
 MAX_LEVEL_MB=3
 
-# Definizione lista core: 1, e poi da 2 a 56 con passo 2
 CORES_LIST="$(seq 8 4 34) $(seq 36 10 56)"
 
-# Intestazione CSV (Aggiunta colonna Cores all'inizio)
 echo "Cores,Solver,Degree,Refinement,SetupSystemCPU,SetupSystemWall,NumberOfElements,DoFs,DoFsPerCell,QPointsPerCell,RhsCpu,RhsWall,SolvingLinearSystemCPU,SolvingLinearSystemWall,Iterations,TimePerIter(s),Throughput(MDoFs/s)" > $CSV_FILE
 
 # --- Matrix-Free Benchmark ---
@@ -25,7 +23,6 @@ for n_cores in $CORES_LIST; do
 
             OUTPUT=$(mpirun -n $n_cores $EXEC_MF 1 $L "$MULTIGRID_OPTION" $p)
 
-            # Estrazione dati (Regex invariate)
             SETUP_SYSTEM_CPU=$(echo "$OUTPUT" | grep -oP 'Setup matrix-free system\s*\(CPU\/wall\)\s\K[0-9.]+')
             SETUP_SYSTEM_WALL=$(echo "$OUTPUT" | grep -oP 'Setup matrix-free system\s*\(CPU\/wall\)\s[0-9.]+\s*s\/\s*\K[0-9.]+')
             NUMBER_ELEMENTS=$(echo "$OUTPUT" | grep -oP 'Number of elements = \K[0-9]+')
@@ -64,7 +61,6 @@ for n_cores in $CORES_LIST; do
 
             OUTPUT=$(mpirun -n $n_cores $EXEC_MB 1 $L "$MULTIGRID_OPTION" $p)
 
-            # Estrazione dati specifica per Matrix-Based
             SETUP_SYSTEM_CPU=$(echo "$OUTPUT" | grep -oP 'Setup system\s*\(CPU\/wall\)\s\K[0-9.]+')
             SETUP_SYSTEM_WALL=$(echo "$OUTPUT" | grep -oP 'Setup system\s*\(CPU\/wall\)\s[0-9.]+\s*s\/\s*\K[0-9.]+')
             NUMBER_ELEMENTS=$(echo "$OUTPUT" | grep -oP 'Number of elements = \K[0-9]+')

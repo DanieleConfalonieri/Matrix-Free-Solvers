@@ -47,6 +47,3 @@ target_link_libraries(weak_scaling_free adr_core_free)
 
 add_executable(weak_scaling_based src/weak_scaling_based.cpp)
 target_link_libraries(weak_scaling_based adr_core_based)
-
-### calc_core
-add_executable(calc_core build/calc_core.cpp)
